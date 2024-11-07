@@ -1,46 +1,28 @@
 const path = require('path');
-const HtmlWebpackPlugin = require('html-webpack-plugin');
 
 module.exports = {
-  mode: 'development', // or 'production' for production builds
-  entry: './src/renderer.tsx',
-  devtool: 'source-map',
+  mode: 'development', // or 'production'
+  entry: './src/renderer/index.tsx',
+  output: {
+    path: path.resolve(__dirname, 'dist/renderer'),
+    filename: 'bundle.js',
+  },
   target: 'electron-renderer',
+  resolve: {
+    extensions: ['.ts', '.tsx', '.js', '.jsx'],
+  },
   module: {
     rules: [
       {
         test: /\.tsx?$/,
-        exclude: /node_modules/,
+        include: /src/,
         use: {
           loader: 'babel-loader',
+          options: {
+            configFile: './src/renderer/babel.config.js',
+          },
         },
-      },
-      {
-        test: /\.css$/,
-        use: ['style-loader', 'css-loader'],
-      },
-      {
-        enforce: 'pre',
-        test: /\.js$/,
-        loader: 'source-map-loader',
       },
     ],
   },
-  resolve: {
-    extensions: ['.tsx', '.ts', '.js'],
-    fallback: {
-      "fs": false,
-      "path": false,
-      "os": false,
-    },
-  },
-  output: {
-    filename: 'renderer.js',
-    path: path.resolve(__dirname, 'dist'),
-  },
-  plugins: [
-    new HtmlWebpackPlugin({
-      template: './src/index.html', // We'll create this file next
-    }),
-  ],
 };
