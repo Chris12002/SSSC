@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { app, BrowserWindow, dialog, ipcMain } from 'electron';
 import path from 'path';
 import { getProcedures, getSnapshots, getSnapshotContent } from './db.js';

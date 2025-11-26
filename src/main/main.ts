@@ -1,51 +1,206 @@
 import { app, BrowserWindow, dialog, ipcMain } from 'electron';
+import crypto from 'crypto';
 import path from 'path';
-import { parseStringPromise } from 'xml2js';
-import { saveHtmlFile} from './utils/fileutils';
-import { fileURLToPath } from 'url';
-import Store from 'electron-store'
-import {ServerLogonFields, SchemaSource} from '../shared/types';
+import Store from 'electron-store';
+import { SchemaSource, ServerLogonFields } from '../shared/types';
 import DatabaseService from './services/databaseService';
 import SchemaExtractorService from './services/schemaExtractorService';
-;
+import { saveHtmlFile } from './utils/fileutils';
+import {
+  buildCredentialId,
+  deleteSecret,
+  ensureSecret,
+  getSecret,
+  setSecret,
+} from './services/keychainService';
+
+interface CredentialsMetadata {
+  server: string;
+  username: string;
+  credentialId: string;
+  saveCredentials: boolean;
+}
+
+type StoreSchema = {
+  logonFields?: CredentialsMetadata | (ServerLogonFields & { credentialId?: string });
+  lastSavedDirectory?: string;
+  lastScriptsFolder?: string;
+};
+
+type LegacyStoreSchema = StoreSchema & {
+  logonFields?: ServerLogonFields;
+};
+
+const LEGACY_ENCRYPTION_KEY = 'mf23r03j8f43£tj3t439th430jt3';
+const CREDENTIAL_SERVICE = `${app.getName()}-credentials`;
+const CONFIG_SERVICE = `${app.getName()}-config`;
+const CONFIG_KEY_ACCOUNT = 'store-encryption-key';
 
 let mainWindow: BrowserWindow;
+let store: Store<StoreSchema> | null = null;
 
 // Enable remote debugging
 app.commandLine.appendSwitch('remote-debugging-port', '9222');
 
-const store = new Store({
-  encryptionKey: 'mf23r03j8f43£tj3t439th430jt3', // TODO: Add method for generating key in situ
-});
-
+const persistenceReady = initializePersistence();
 const databaseService = DatabaseService.getInstance();
 
+async function ensureEncryptionKey(): Promise<{ key: string; created: boolean }> {
+  const { secret, created } = await ensureSecret(CONFIG_SERVICE, CONFIG_KEY_ACCOUNT, () =>
+    crypto.randomBytes(32).toString('hex'),
+  );
+  return { key: secret, created };
+}
 
-ipcMain.handle('get-stored-credentials', async () => {
-  const credentials: ServerLogonFields = store.get('logonFields', null);
-  if (!credentials) {
+function getStore(): Store<StoreSchema> {
+  if (!store) {
+    throw new Error('Configuration store has not been initialised.');
+  }
+  return store;
+}
+
+async function migrateLegacyCredentials(legacyCredentials?: ServerLogonFields | null) {
+  if (!legacyCredentials) {
+    return;
+  }
+
+  if (!legacyCredentials.server || !legacyCredentials.username) {
+    getStore().delete('logonFields');
+    return;
+  }
+
+  const credentialId =
+    legacyCredentials.credentialId || buildCredentialId(legacyCredentials.server, legacyCredentials.username);
+
+  if (!legacyCredentials.saveCredentials) {
+    await deleteSecret(CREDENTIAL_SERVICE, credentialId);
+    getStore().delete('logonFields');
+    return;
+  }
+
+  if (legacyCredentials.password) {
+    await setSecret(CREDENTIAL_SERVICE, credentialId, legacyCredentials.password);
+  }
+
+  const metadata: CredentialsMetadata = {
+    server: legacyCredentials.server,
+    username: legacyCredentials.username,
+    credentialId,
+    saveCredentials: Boolean(legacyCredentials.saveCredentials),
+  };
+
+  getStore().set('logonFields', metadata);
+}
+
+async function initializePersistence() {
+  await app.whenReady();
+  const { key: encryptionKey, created } = await ensureEncryptionKey();
+
+  if (created) {
+    const legacyStore = new Store<LegacyStoreSchema>({
+      encryptionKey: LEGACY_ENCRYPTION_KEY,
+      clearInvalidConfig: true,
+    });
+    const legacyData = legacyStore.store;
+    store = new Store<StoreSchema>({
+      encryptionKey,
+      clearInvalidConfig: true,
+    });
+
+    const { logonFields: legacyLogonFields, ...persistedValues } = legacyData;
+    if (Object.keys(persistedValues).length > 0) {
+      store.store = persistedValues;
+    }
+    await migrateLegacyCredentials(legacyLogonFields);
+  } else {
+    store = new Store<StoreSchema>({
+      encryptionKey,
+      clearInvalidConfig: true,
+    });
+    await migrateLegacyCredentials(store.get('logonFields') as ServerLogonFields | undefined);
+  }
+}
+
+async function getStoredPassword(credentialId?: string): Promise<string | null> {
+  if (!credentialId) {
     return null;
   }
-  return {...credentials,
-         password: ''};
+  return await getSecret(CREDENTIAL_SERVICE, credentialId);
+}
+
+async function hydrateCredentials(credentials: ServerLogonFields): Promise<ServerLogonFields> {
+  if (credentials.password) {
+    return credentials;
+  }
+
+  const password = await getStoredPassword(credentials.credentialId);
+  if (!password) {
+    throw new Error('No stored password found for the provided credentials.');
+  }
+
+  return { ...credentials, password };
+}
+
+ipcMain.handle('get-stored-credentials', async () => {
+  await persistenceReady;
+  const stored = getStore().get('logonFields');
+  if (!stored || !('credentialId' in stored) || !stored.credentialId) {
+    return null;
+  }
+  const { password: _password, ...metadata } = stored as CredentialsMetadata & Partial<ServerLogonFields>;
+  return metadata;
 });
 
 ipcMain.handle('store-credentials', async (event, credentials: ServerLogonFields) => {
-  store.set('logonFields', credentials);
+  await persistenceReady;
+  const storage = getStore();
+  const credentialId = buildCredentialId(credentials.server, credentials.username);
+
+  if (!credentials.saveCredentials) {
+    const existing = storage.get('logonFields');
+    if (existing && 'credentialId' in existing && existing.credentialId) {
+      await deleteSecret(CREDENTIAL_SERVICE, existing.credentialId);
+    } else {
+      await deleteSecret(CREDENTIAL_SERVICE, credentialId);
+    }
+    storage.delete('logonFields');
+    return;
+  }
+  const existing = storage.get('logonFields');
+  if (existing && 'credentialId' in existing && existing.credentialId && existing.credentialId !== credentialId) {
+    await deleteSecret(CREDENTIAL_SERVICE, existing.credentialId);
+  }
+  if (credentials.password) {
+    await setSecret(CREDENTIAL_SERVICE, credentialId, credentials.password);
+  }
+
+  const metadata: CredentialsMetadata = {
+    server: credentials.server,
+    username: credentials.username,
+    credentialId,
+    saveCredentials: credentials.saveCredentials,
+  };
+
+  storage.set('logonFields', metadata);
 });
 
 ipcMain.handle('set-credentials', async (event, credentials: ServerLogonFields) => {
-  await databaseService.setConfig(credentials);
+  await persistenceReady;
+  const hydrated = await hydrateCredentials(credentials);
+  await databaseService.setConfig(hydrated);
 });
 
 ipcMain.handle('clear-stored-credentials', async () => {
-  store.delete('logonFields');
+  await persistenceReady;
+  const stored = getStore().get('logonFields');
+  if (stored && 'credentialId' in stored && stored.credentialId) {
+    await deleteSecret(CREDENTIAL_SERVICE, stored.credentialId);
+  }
+  getStore().delete('logonFields');
 });
 
 ipcMain.handle('get-databases', async () => {
-
   return await databaseService.getDatabases();
-
 });
 
 function createWindow() {
@@ -65,15 +220,18 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
-    const config = store.get('logonFields');
+  await persistenceReady;
+  const stored = getStore().get('logonFields') as CredentialsMetadata | undefined;
 
-    if (config) {      
-      await databaseService.setConfig(config);
+  if (stored?.credentialId && stored.saveCredentials) {
+    const password = await getStoredPassword(stored.credentialId);
+    if (password) {
+      await databaseService.setConfig({ ...stored, password });
     }
+  }
 
-    store.openInEditor
-    createWindow();
-  });
+  createWindow();
+});
 
 // IPC Handlers
 ipcMain.handle('getProcedures', async () => {
@@ -115,8 +273,11 @@ ipcMain.handle('update-db', async (event, dbName) => {
 });
 
 ipcMain.handle('show-save-dialog', async (event, defaultFileName) => {
+  await persistenceReady;
+  const storage = getStore();
   // Retrieve the last saved directory from the store
-  const defaultPath = store.get('lastSavedDirectory', app.getPath('documents'));
+  const defaultPath =
+    (storage.get('lastSavedDirectory', app.getPath('documents')) as string) || app.getPath('documents');
 
   const options = {
     title: 'Save Diff HTML',
@@ -130,18 +291,21 @@ ipcMain.handle('show-save-dialog', async (event, defaultFileName) => {
     return { canceled: true };
   } else {
     // Store the directory for future use
-    store.set('lastSavedDirectory', path.dirname(filePath));
+    storage.set('lastSavedDirectory', path.dirname(filePath));
     return { canceled: false, filePath };
   }
 });
 
 ipcMain.handle('show-folder-dialog', async (event, title?: string) => {
-  const defaultPath = store.get('lastScriptsFolder', app.getPath('documents'));
+  await persistenceReady;
+  const storage = getStore();
+  const defaultPath =
+    (storage.get('lastScriptsFolder', app.getPath('documents')) as string) || app.getPath('documents');
 
   const options = {
     title: title || 'Select Scripts Folder',
     defaultPath: defaultPath,
-    properties: ['openDirectory'] as const,
+    properties: ['openDirectory'] as Array<'openDirectory'>,
   };
 
   const { canceled, filePaths } = await dialog.showOpenDialog(options);
@@ -150,7 +314,7 @@ ipcMain.handle('show-folder-dialog', async (event, title?: string) => {
     return { canceled: true };
   } else {
     const folderPath = filePaths[0];
-    store.set('lastScriptsFolder', folderPath);
+    storage.set('lastScriptsFolder', folderPath);
     return { canceled: false, folderPath };
   }
 });
