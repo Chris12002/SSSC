@@ -56,8 +56,11 @@ function decryptSecret(encrypted: string): string {
   return buffer.toString('utf-8');
 }
 
-export function buildCredentialId(server: string, username: string): string {
-  return crypto.createHash('sha256').update(`${server}:${username}`).digest('hex');
+export function buildCredentialId(server: string, username: string, sourceId?: string): string {
+  return crypto
+    .createHash('sha256')
+    .update(`${server}:${username}:${sourceId ?? 'default'}`)
+    .digest('hex');
 }
 
 export async function setSecret(service: string, account: string, secret: string): Promise<void> {
