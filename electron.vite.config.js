@@ -35,6 +35,11 @@ export default defineConfig({
     build: {
       sourcemap: true,
     }
-    // Renderer configuration
   },
+  server: {
+    port: 5173
+  },
+  electronApp: {
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu']
+  }
 });

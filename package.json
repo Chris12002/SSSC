@@ -51,7 +51,7 @@
     "watch:renderer": "webpack --watch",
     "type-check": "tsc --noEmit",
     "dist": "npm run build && electron-builder",
-    "dev": "electron-vite dev",
+    "dev": "LD_LIBRARY_PATH=$HOME/.nix-profile/lib:$LD_LIBRARY_PATH ELECTRON_DISABLE_SANDBOX=1 electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview"
   },
