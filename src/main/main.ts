@@ -4,8 +4,9 @@ import { parseStringPromise } from 'xml2js';
 import { saveHtmlFile} from './utils/fileutils';
 import { fileURLToPath } from 'url';
 import Store from 'electron-store'
-import {ServerLogonFields} from '../shared/types';
+import {ServerLogonFields, SchemaSource} from '../shared/types';
 import DatabaseService from './services/databaseService';
+import SchemaExtractorService from './services/schemaExtractorService';
 ;
 
 let mainWindow: BrowserWindow;
@@ -151,6 +152,21 @@ ipcMain.handle('show-folder-dialog', async (event, title?: string) => {
     const folderPath = filePaths[0];
     store.set('lastScriptsFolder', folderPath);
     return { canceled: false, folderPath };
+  }
+});
+
+ipcMain.handle('extract-schema', async (event, source: SchemaSource) => {
+  if (source.type !== 'database' || !source.credentials || !source.database) {
+    throw new Error('Invalid database source configuration');
+  }
+
+  const extractor = new SchemaExtractorService();
+  try {
+    await extractor.connect(source.credentials, source.database);
+    const objects = await extractor.extractAllObjects();
+    return objects;
+  } finally {
+    await extractor.disconnect();
   }
 });
 
