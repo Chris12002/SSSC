@@ -13,6 +13,10 @@ contextBridge.exposeInMainWorld('api', {
     const result = await ipcRenderer.invoke('show-save-dialog', defaultFileName);
     return result;
   },
+  selectFolder: async (title?: string) => {
+    const result = await ipcRenderer.invoke('show-folder-dialog', title);
+    return result;
+  },
   getStoredCredentials: () => ipcRenderer.invoke('get-stored-credentials'),
   storeCredentials: (credentials: ServerLogonFields) => ipcRenderer.invoke('store-credentials', credentials),
   setCredentials: (credentials: ServerLogonFields) => ipcRenderer.invoke('set-credentials', credentials),    

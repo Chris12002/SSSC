@@ -134,4 +134,24 @@ ipcMain.handle('show-save-dialog', async (event, defaultFileName) => {
   }
 });
 
+ipcMain.handle('show-folder-dialog', async (event, title?: string) => {
+  const defaultPath = store.get('lastScriptsFolder', app.getPath('documents'));
+
+  const options = {
+    title: title || 'Select Scripts Folder',
+    defaultPath: defaultPath,
+    properties: ['openDirectory'] as const,
+  };
+
+  const { canceled, filePaths } = await dialog.showOpenDialog(options);
+
+  if (canceled || filePaths.length === 0) {
+    return { canceled: true };
+  } else {
+    const folderPath = filePaths[0];
+    store.set('lastScriptsFolder', folderPath);
+    return { canceled: false, folderPath };
+  }
+});
+
 
