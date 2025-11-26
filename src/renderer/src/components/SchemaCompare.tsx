@@ -58,6 +58,7 @@ const SchemaCompare: React.FC<SchemaCompareProps> = ({ onBack }) => {
                 <Grid size={{ xs: 12, md: 6 }}>
                   <SourceSelector
                     title="Source"
+                    sourceId="sourceA"
                     source={sourceConfig}
                     onSourceChange={setSourceConfig}
                   />
@@ -65,6 +66,7 @@ const SchemaCompare: React.FC<SchemaCompareProps> = ({ onBack }) => {
                 <Grid size={{ xs: 12, md: 6 }}>
                   <SourceSelector
                     title="Target"
+                    sourceId="sourceB"
                     source={targetConfig}
                     onSourceChange={setTargetConfig}
                   />

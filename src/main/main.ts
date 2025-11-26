@@ -22,14 +22,17 @@ interface CredentialsMetadata {
 }
 
 type StoreSchema = {
+  credentials?: Record<string, CredentialsMetadata>;
   logonFields?: CredentialsMetadata | (ServerLogonFields & { credentialId?: string });
   lastSavedDirectory?: string;
   lastScriptsFolder?: string;
 };
 
 type LegacyStoreSchema = StoreSchema & {
-  logonFields?: ServerLogonFields;
+  logonFields?: CredentialsMetadata | (ServerLogonFields & { credentialId?: string });
 };
+
+const DEFAULT_SOURCE_ID = 'default';
 
 const LEGACY_ENCRYPTION_KEY = 'mf23r03j8f43£tj3t439th430jt3';
 const CREDENTIAL_SERVICE = `${app.getName()}-credentials`;
@@ -59,8 +62,19 @@ function getStore(): Store<StoreSchema> {
   return store;
 }
 
-async function migrateLegacyCredentials(legacyCredentials?: ServerLogonFields | null) {
+function getStoredCredentialMap(): Record<string, CredentialsMetadata> {
+  return getStore().get('credentials') || {};
+}
+
+function persistCredentialMap(map: Record<string, CredentialsMetadata>) {
+  getStore().set('credentials', map);
+}
+
+async function migrateLegacyCredentials(
+  legacyCredentials?: CredentialsMetadata | (ServerLogonFields & { credentialId?: string }) | null,
+) {
   if (!legacyCredentials) {
+    getStore().delete('logonFields');
     return;
   }
 
@@ -69,8 +83,11 @@ async function migrateLegacyCredentials(legacyCredentials?: ServerLogonFields | 
     return;
   }
 
+  const sourceId = DEFAULT_SOURCE_ID;
   const credentialId =
-    legacyCredentials.credentialId || buildCredentialId(legacyCredentials.server, legacyCredentials.username);
+    'credentialId' in legacyCredentials && legacyCredentials.credentialId
+      ? legacyCredentials.credentialId
+      : buildCredentialId(legacyCredentials.server, legacyCredentials.username, sourceId);
 
   if (!legacyCredentials.saveCredentials) {
     await deleteSecret(CREDENTIAL_SERVICE, credentialId);
@@ -78,7 +95,7 @@ async function migrateLegacyCredentials(legacyCredentials?: ServerLogonFields | 
     return;
   }
 
-  if (legacyCredentials.password) {
+  if ('password' in legacyCredentials && legacyCredentials.password) {
     await setSecret(CREDENTIAL_SERVICE, credentialId, legacyCredentials.password);
   }
 
@@ -89,7 +106,10 @@ async function migrateLegacyCredentials(legacyCredentials?: ServerLogonFields | 
     saveCredentials: Boolean(legacyCredentials.saveCredentials),
   };
 
-  getStore().set('logonFields', metadata);
+  const credentialMap = getStoredCredentialMap();
+  credentialMap[sourceId] = metadata;
+  persistCredentialMap(credentialMap);
+  getStore().delete('logonFields');
 }
 
 async function initializePersistence() {
@@ -128,48 +148,68 @@ async function getStoredPassword(credentialId?: string): Promise<string | null> 
   return await getSecret(CREDENTIAL_SERVICE, credentialId);
 }
 
-async function hydrateCredentials(credentials: ServerLogonFields): Promise<ServerLogonFields> {
+function resolveCredentialMetadata(sourceId: string): { key: string; metadata: CredentialsMetadata } | null {
+  const credentialMap = getStoredCredentialMap();
+  if (credentialMap[sourceId]) {
+    return { key: sourceId, metadata: credentialMap[sourceId] };
+  }
+
+  if (credentialMap[DEFAULT_SOURCE_ID]) {
+    return { key: DEFAULT_SOURCE_ID, metadata: credentialMap[DEFAULT_SOURCE_ID] };
+  }
+  return null;
+}
+
+async function hydrateCredentials(sourceId: string, credentials: ServerLogonFields): Promise<ServerLogonFields> {
   if (credentials.password) {
     return credentials;
   }
 
-  const password = await getStoredPassword(credentials.credentialId);
+  const resolved = resolveCredentialMetadata(sourceId);
+  const credentialId = credentials.credentialId || resolved?.metadata.credentialId;
+  const password = await getStoredPassword(credentialId);
   if (!password) {
     throw new Error('No stored password found for the provided credentials.');
   }
 
-  return { ...credentials, password };
+  return { ...credentials, password, credentialId };
 }
 
-ipcMain.handle('get-stored-credentials', async () => {
+ipcMain.handle('get-stored-credentials', async (event, sourceId: string) => {
   await persistenceReady;
-  const stored = getStore().get('logonFields');
-  if (!stored || !('credentialId' in stored) || !stored.credentialId) {
+  const resolved = resolveCredentialMetadata(sourceId);
+  if (!resolved) {
     return null;
   }
-  const { password: _password, ...metadata } = stored as CredentialsMetadata & Partial<ServerLogonFields>;
-  return metadata;
+  const { password: _password, ...metadata } = resolved.metadata as CredentialsMetadata & Partial<ServerLogonFields>;
+  return { ...metadata, sourceId: resolved.key };
 });
 
-ipcMain.handle('store-credentials', async (event, credentials: ServerLogonFields) => {
+ipcMain.handle('store-credentials', async (event, sourceId: string, credentials: ServerLogonFields) => {
   await persistenceReady;
-  const storage = getStore();
-  const credentialId = buildCredentialId(credentials.server, credentials.username);
+  const credentialMap = getStoredCredentialMap();
+  const existingEntry = credentialMap[sourceId];
+  const resolved = existingEntry ? { key: sourceId, metadata: existingEntry } : resolveCredentialMetadata(sourceId);
+  const credentialId = buildCredentialId(credentials.server, credentials.username, sourceId);
 
   if (!credentials.saveCredentials) {
-    const existing = storage.get('logonFields');
-    if (existing && 'credentialId' in existing && existing.credentialId) {
-      await deleteSecret(CREDENTIAL_SERVICE, existing.credentialId);
+    if (resolved?.metadata.credentialId) {
+      await deleteSecret(CREDENTIAL_SERVICE, resolved.metadata.credentialId);
     } else {
       await deleteSecret(CREDENTIAL_SERVICE, credentialId);
     }
-    storage.delete('logonFields');
+    const keyToDelete = credentialMap[sourceId] ? sourceId : resolved?.key;
+    if (keyToDelete && credentialMap[keyToDelete]) {
+      delete credentialMap[keyToDelete];
+    }
+    persistCredentialMap(credentialMap);
     return;
   }
-  const existing = storage.get('logonFields');
-  if (existing && 'credentialId' in existing && existing.credentialId && existing.credentialId !== credentialId) {
-    await deleteSecret(CREDENTIAL_SERVICE, existing.credentialId);
+
+  if (existingEntry && existingEntry.credentialId && existingEntry.credentialId !== credentialId) {
+    await deleteSecret(CREDENTIAL_SERVICE, existingEntry.credentialId);
   }
+
   if (credentials.password) {
     await setSecret(CREDENTIAL_SERVICE, credentialId, credentials.password);
   }
@@ -181,22 +221,27 @@ ipcMain.handle('store-credentials', async (event, credentials: ServerLogonFields
     saveCredentials: credentials.saveCredentials,
   };
 
-  storage.set('logonFields', metadata);
+  credentialMap[sourceId] = metadata;
+  persistCredentialMap(credentialMap);
 });
 
-ipcMain.handle('set-credentials', async (event, credentials: ServerLogonFields) => {
+ipcMain.handle('set-credentials', async (event, sourceId: string, credentials: ServerLogonFields) => {
   await persistenceReady;
-  const hydrated = await hydrateCredentials(credentials);
+  const hydrated = await hydrateCredentials(sourceId, credentials);
   await databaseService.setConfig(hydrated);
 });
 
-ipcMain.handle('clear-stored-credentials', async () => {
+ipcMain.handle('clear-stored-credentials', async (event, sourceId: string) => {
   await persistenceReady;
-  const stored = getStore().get('logonFields');
-  if (stored && 'credentialId' in stored && stored.credentialId) {
-    await deleteSecret(CREDENTIAL_SERVICE, stored.credentialId);
+  const credentialMap = getStoredCredentialMap();
+  const resolved = resolveCredentialMetadata(sourceId);
+  if (resolved?.metadata.credentialId) {
+    await deleteSecret(CREDENTIAL_SERVICE, resolved.metadata.credentialId);
   }
-  getStore().delete('logonFields');
+  if (resolved) {
+    delete credentialMap[resolved.key];
+    persistCredentialMap(credentialMap);
+  }
 });
 
 ipcMain.handle('get-databases', async () => {
@@ -221,12 +266,12 @@ function createWindow() {
 
 app.whenReady().then(async () => {
   await persistenceReady;
-  const stored = getStore().get('logonFields') as CredentialsMetadata | undefined;
+  const resolved = resolveCredentialMetadata(DEFAULT_SOURCE_ID);
 
-  if (stored?.credentialId && stored.saveCredentials) {
-    const password = await getStoredPassword(stored.credentialId);
+  if (resolved?.metadata.credentialId && resolved.metadata.saveCredentials) {
+    const password = await getStoredPassword(resolved.metadata.credentialId);
     if (password) {
-      await databaseService.setConfig({ ...stored, password });
+      await databaseService.setConfig({ ...resolved.metadata, password });
     }
   }
 

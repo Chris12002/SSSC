@@ -8,12 +8,14 @@ interface DatabaseSelectorProps {
   databases: string[];
   selectedDatabase: string | null;
   onSelectDatabase: (database: string | null) => void;
+  label?: string;
 }
 
 const DatabaseSelector: React.FC<DatabaseSelectorProps> = ({
   databases,
   selectedDatabase,
   onSelectDatabase,
+  label,
 }) => {
   return (
     <Autocomplete
@@ -22,7 +24,9 @@ const DatabaseSelector: React.FC<DatabaseSelectorProps> = ({
       onChange={(event, newValue) => {
         onSelectDatabase(newValue);
       }}
-      renderInput={(params) => <TextField {...params} label="Select Database" variant="outlined" />}
+      renderInput={(params) => (
+        <TextField {...params} label={label || 'Select Database'} variant="outlined" />
+      )}
     />
   );
 };

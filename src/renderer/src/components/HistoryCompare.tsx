@@ -16,6 +16,7 @@ interface HistoryCompareProps {
 }
 
 const HistoryCompare: React.FC<HistoryCompareProps> = ({ onBack }) => {
+  const SOURCE_ID = 'history';
   const [procedures, setProcedures] = useState<string[]>([]);
   const [selectedProcedure, setSelectedProcedure] = useState<string>('');
   const [snapshots, setSnapshots] = useState<any[]>([]);
@@ -28,15 +29,18 @@ const HistoryCompare: React.FC<HistoryCompareProps> = ({ onBack }) => {
   const [databases, setDatabases] = useState<string[]>([]);
   const [selectedDatabase, setSelectedDatabase] = useState<string | null>(null);
   const [diffs, setDiffs] = useState<DiffItem[]>([]);
+  const databaseLabel = credentials
+    ? `Select Database (${credentials.username}@${credentials.server})`
+    : 'Select Database';
 
   const snackbarContext = useContext(SnackbarContext);
   const { showSnackbar } = snackbarContext!;
 
   useEffect(() => {
     const fetchCredentials = async () => {
-      const storedCredentials = await window.api.getStoredCredentials();
+      const storedCredentials = await window.api.getStoredCredentials(SOURCE_ID);
       if (storedCredentials) {
-        setCredentials(storedCredentials);
+        await setDatabaseCredentials(storedCredentials);
         await fetchDatabases();
       } else {
         setIsLoginOpen(true);
@@ -56,19 +60,21 @@ const HistoryCompare: React.FC<HistoryCompareProps> = ({ onBack }) => {
   };
 
   const handleLoginSubmit = async (creds: ServerLogonFields) => {
+    const credentialsWithSource = { ...creds, sourceId: SOURCE_ID };
     if (creds.saveCredentials) {
-      await window.api.storeCredentials(creds);
+      await window.api.storeCredentials(SOURCE_ID, credentialsWithSource);
     } else {
-      await window.api.clearStoredCredentials();
+      await window.api.clearStoredCredentials(SOURCE_ID);
     }
-    await setDatabaseCredentials(creds);
+    await setDatabaseCredentials(credentialsWithSource);
     setIsLoginOpen(false);
     await fetchDatabases();
   };
 
   const setDatabaseCredentials = async (creds: ServerLogonFields) => {
-    await window.api.setCredentials(creds);
-    setCredentials(creds);
+    await window.api.setCredentials(SOURCE_ID, creds);
+    const { password: _password, ...metadata } = creds;
+    setCredentials({ ...metadata, sourceId: SOURCE_ID });
   };
 
   const setDatabase = async (dbName: string | null) => {
@@ -76,6 +82,14 @@ const HistoryCompare: React.FC<HistoryCompareProps> = ({ onBack }) => {
       await window.api.updateDatabase(dbName);
     }
     setSelectedDatabase(dbName);
+  };
+
+  const handleClearStoredCredentials = async () => {
+    await window.api.clearStoredCredentials(SOURCE_ID);
+    setCredentials((prev) => (prev ? { ...prev, credentialId: undefined, saveCredentials: false } : null));
+    setSelectedDatabase(null);
+    setProcedures([]);
+    setSnapshots([]);
   };
 
   const fetchDatabases = async () => {
@@ -218,10 +232,29 @@ const HistoryCompare: React.FC<HistoryCompareProps> = ({ onBack }) => {
             </Typography>
           </Box>
 
+          <Box display="flex" alignItems="center" justifyContent="space-between" mb={2}>
+            <Typography variant="body2" color="textSecondary">
+              {credentials?.saveCredentials
+                ? `Saved credentials for ${credentials.server} (${credentials.username})`
+                : 'No saved credentials'}
+            </Typography>
+            <Box>
+              <Button variant="text" size="small" onClick={() => setIsLoginOpen(true)} sx={{ mr: 1 }}>
+                {credentials ? 'Update Credentials' : 'Add Credentials'}
+              </Button>
+              {credentials?.saveCredentials && (
+                <Button variant="text" size="small" onClick={handleClearStoredCredentials}>
+                  Clear Saved Credentials
+                </Button>
+              )}
+            </Box>
+          </Box>
+
           <DatabaseSelector
             databases={databases}
             selectedDatabase={selectedDatabase}
             onSelectDatabase={(db) => setDatabase(db)}
+            label={databaseLabel}
           />
 
           <ProcedureSelector

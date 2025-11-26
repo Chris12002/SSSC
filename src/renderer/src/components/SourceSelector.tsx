@@ -20,32 +20,39 @@ import LoginModal from './LoginModal';
 
 interface SourceSelectorProps {
   title: string;
+  sourceId: string;
   source: SchemaSource | null;
   onSourceChange: (source: SchemaSource | null) => void;
 }
 
-const SourceSelector: React.FC<SourceSelectorProps> = ({ title, source, onSourceChange }) => {
+const SourceSelector: React.FC<SourceSelectorProps> = ({ title, sourceId, source, onSourceChange }) => {
   const [sourceType, setSourceType] = useState<SchemaSourceType>(source?.type || 'database');
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [localCredentials, setLocalCredentials] = useState<ServerLogonFields | null>(null);
+  const [storedCredentials, setStoredCredentials] = useState<ServerLogonFields | null>(null);
   const [databases, setDatabases] = useState<string[]>([]);
   const [selectedDatabase, setSelectedDatabase] = useState<string>('');
   const [folderPath, setFolderPath] = useState<string>('');
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
+  const databaseLabel = localCredentials
+    ? `Database (${localCredentials.username}@${localCredentials.server})`
+    : 'Database';
+
   const snackbarContext = useContext(SnackbarContext);
   const { showSnackbar } = snackbarContext!;
 
   useEffect(() => {
     const loadCredentials = async () => {
-      const storedCredentials = await window.api.getStoredCredentials();
-      if (storedCredentials) {
-        setLocalCredentials(storedCredentials);
+      const stored = await window.api.getStoredCredentials(sourceId);
+      if (stored) {
+        setLocalCredentials(stored);
+        setStoredCredentials(stored);
       }
     };
     loadCredentials();
-  }, []);
+  }, [sourceId]);
 
   const handleTypeChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const newType = event.target.value as SchemaSourceType;
@@ -65,7 +72,7 @@ const SourceSelector: React.FC<SourceSelectorProps> = ({ title, source, onSource
     
     setIsLoading(true);
     try {
-      await window.api.setCredentials(localCredentials);
+      await window.api.setCredentials(sourceId, localCredentials);
       const dbs = await window.api.getDatabases();
       setDatabases(dbs);
       setIsConnected(true);
@@ -78,15 +85,20 @@ const SourceSelector: React.FC<SourceSelectorProps> = ({ title, source, onSource
   };
 
   const handleLoginSubmit = async (creds: ServerLogonFields) => {
+    const credentialsWithSource = { ...creds, sourceId };
     if (creds.saveCredentials) {
-      await window.api.storeCredentials(creds);
+      await window.api.storeCredentials(sourceId, credentialsWithSource);
+      setStoredCredentials({ ...credentialsWithSource, password: undefined });
+    } else {
+      await window.api.clearStoredCredentials(sourceId);
+      setStoredCredentials(null);
     }
-    setLocalCredentials(creds);
+    setLocalCredentials(credentialsWithSource);
     setIsLoginOpen(false);
-    
+
     setIsLoading(true);
     try {
-      await window.api.setCredentials(creds);
+      await window.api.setCredentials(sourceId, credentialsWithSource);
       const dbs = await window.api.getDatabases();
       setDatabases(dbs);
       setIsConnected(true);
@@ -105,10 +117,18 @@ const SourceSelector: React.FC<SourceSelectorProps> = ({ title, source, onSource
         name: `${localCredentials.server}/${dbName}`,
         database: dbName,
         server: localCredentials.server,
-        credentials: localCredentials,
+        credentials: { ...localCredentials, sourceId },
       });
     } else {
       onSourceChange(null);
+    }
+  };
+
+  const handleClearStoredCredentials = async () => {
+    await window.api.clearStoredCredentials(sourceId);
+    setStoredCredentials(null);
+    if (localCredentials) {
+      setLocalCredentials({ ...localCredentials, credentialId: undefined, saveCredentials: false });
     }
   };
 
@@ -141,11 +161,28 @@ const SourceSelector: React.FC<SourceSelectorProps> = ({ title, source, onSource
 
         {sourceType === 'database' && (
           <Box>
+            <Box display="flex" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+              <Typography variant="body2" color="textSecondary">
+                {storedCredentials?.saveCredentials
+                  ? `Saved credentials for ${storedCredentials.server} (${storedCredentials.username})`
+                  : 'No saved credentials for this source'}
+              </Typography>
+              {storedCredentials?.saveCredentials && (
+                <Button
+                  variant="text"
+                  size="small"
+                  onClick={handleClearStoredCredentials}
+                  disabled={isLoading}
+                >
+                  Clear Saved Credentials
+                </Button>
+              )}
+            </Box>
             {!isConnected ? (
               <Box>
                 <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
-                  {localCredentials 
-                    ? `Server: ${localCredentials.server}` 
+                  {localCredentials
+                    ? `Server: ${localCredentials.server}`
                     : 'No credentials configured'}
                 </Typography>
                 <Button 
@@ -168,12 +205,13 @@ const SourceSelector: React.FC<SourceSelectorProps> = ({ title, source, onSource
               <Box>
                 <Typography variant="body2" color="success.main" sx={{ mb: 2 }}>
                   Connected to: {localCredentials?.server}
+                  {localCredentials?.username ? ` as ${localCredentials.username}` : ''}
                 </Typography>
                 <FormControl fullWidth sx={{ mb: 2 }}>
-                  <InputLabel>Database</InputLabel>
+                  <InputLabel>{databaseLabel}</InputLabel>
                   <Select
                     value={selectedDatabase}
-                    label="Database"
+                    label={databaseLabel}
                     onChange={(e) => handleDatabaseChange(e.target.value)}
                   >
                     <MenuItem value="">

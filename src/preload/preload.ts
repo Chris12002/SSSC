@@ -17,10 +17,12 @@ contextBridge.exposeInMainWorld('api', {
     const result = await ipcRenderer.invoke('show-folder-dialog', title);
     return result;
   },
-  getStoredCredentials: () => ipcRenderer.invoke('get-stored-credentials'),
-  storeCredentials: (credentials: ServerLogonFields) => ipcRenderer.invoke('store-credentials', credentials),
-  setCredentials: (credentials: ServerLogonFields) => ipcRenderer.invoke('set-credentials', credentials),    
-  clearStoredCredentials: () => ipcRenderer.invoke('clear-stored-credentials'),
+  getStoredCredentials: (sourceId: string) => ipcRenderer.invoke('get-stored-credentials', sourceId),
+  storeCredentials: (sourceId: string, credentials: ServerLogonFields) =>
+    ipcRenderer.invoke('store-credentials', sourceId, credentials),
+  setCredentials: (sourceId: string, credentials: ServerLogonFields) =>
+    ipcRenderer.invoke('set-credentials', sourceId, credentials),
+  clearStoredCredentials: (sourceId: string) => ipcRenderer.invoke('clear-stored-credentials', sourceId),
   getDatabases: () => ipcRenderer.invoke('get-databases'),
   updateDatabase: (dbName: string) => ipcRenderer.invoke('update-db', dbName),
 });

@@ -3,6 +3,7 @@ export interface ServerLogonFields {
     username: string;
     password?: string;
     credentialId?: string;
+    sourceId?: string;
     saveCredentials: boolean;
   }
 
