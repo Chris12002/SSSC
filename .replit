@@ -4,7 +4,7 @@ expertMode = true
 
 [nix]
 channel = "stable-25_05"
-packages = ["xorg.libX11", "xorg.libXcomposite", "xorg.libXdamage", "xorg.libXext", "xorg.libXfixes", "xorg.libXrandr", "xorg.libxcb", "mesa", "gtk3", "glib", "pango", "cairo", "gdk-pixbuf", "atk", "at-spi2-atk", "cups", "dbus", "expat", "libdrm", "nspr", "nss", "alsa-lib", "libxkbcommon", "xorg.libXinerama", "xorg.libXcursor", "xorg.libXi", "vulkan-loader"]
+packages = ["xorg.libX11", "xorg.libXcomposite", "xorg.libXdamage", "xorg.libXext", "xorg.libXfixes", "xorg.libXrandr", "xorg.libxcb", "mesa", "gtk3", "glib", "pango", "cairo", "gdk-pixbuf", "atk", "at-spi2-atk", "cups", "dbus", "expat", "libdrm", "nspr", "nss", "alsa-lib", "libxkbcommon", "xorg.libXinerama", "xorg.libXcursor", "xorg.libXi", "vulkan-loader", "libgbm"]
 
 [workflows]
 runButton = "Project"
