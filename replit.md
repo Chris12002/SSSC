@@ -1,7 +1,7 @@
 # SSSC (Simple SQL Source Control)
 
 ## Overview
-SSSC is an Electron desktop application designed to help developers manage and version control their SQL database schemas and data. It provides an easy way to track changes, compare snapshots, and ensure consistency across different environments.
+SSSC is an Electron desktop application designed to help developers manage and version control their SQL database schemas. It functions like Red Gate SQL Compare, allowing users to compare database schemas, view differences, and synchronize changes between environments.
 
 ## Project Type
 - **Desktop Application**: Electron-based GUI application
@@ -11,17 +11,35 @@ SSSC is an Electron desktop application designed to help developers manage and v
 
 ## Project Structure
 - `src/main/` - Electron main process (backend logic)
+  - `services/` - Database, schema extraction, folder parsing, and comparison services
+  - `utils/` - File utilities and helpers
+  - `config/` - Database and store configuration
 - `src/renderer/` - React frontend application
+  - `components/` - React UI components (HomeScreen, SchemaCompare, HistoryCompare, etc.)
+  - `types/` - TypeScript type definitions
 - `src/preload/` - Electron preload scripts (IPC bridge)
 - `src/shared/` - Shared types and utilities
 - `out/` - Build output directory
 
 ## Key Features
-- Version control for SQL schemas and data
-- Snapshot comparison and diff generation
-- Integration with SQL Server databases
-- User-friendly Material-UI interface
-- HTML export for diff reports
+
+### Schema Compare Mode
+- Compare database-to-database, folder-to-folder, or mixed comparisons
+- Extract full DDL from SQL Server: tables, views, stored procedures, functions, triggers
+- Parse SQL script folders for schema objects
+- Color-coded diff display:
+  - **Green**: Safe changes (additions, modifications to procs/views/functions)
+  - **Yellow**: Warning changes (table modifications that may need review)
+  - **Red**: Destructive changes (deletions, dropping columns)
+- Filter by object type, name search, and risk level
+- Script generation using CREATE OR ALTER (SQL Server 2016+ compatible)
+- Apply Changes: Execute safe scripts directly to target database
+- Save Scripts: Export to .sql files for git workflows
+
+### History Compare Mode
+- View and compare stored procedure snapshots over time
+- Track changes to database objects with timestamps
+- Generate diff reports in HTML format
 
 ## Build System
 - **Build Tool**: electron-vite
@@ -75,9 +93,24 @@ The application requires special library path configuration to run in Replit:
 - `ELECTRON_DISABLE_SANDBOX=1` to run without SUID sandbox
 
 ## Database Configuration
-The application connects to external Microsoft SQL Server databases. Connection credentials are stored securely using electron-store.
+The application connects to external Microsoft SQL Server databases. Connection credentials are stored securely using electron-store with keychain service.
+
+## Architecture Notes
+- **Isolated Credentials**: Each source/target in Schema Compare maintains its own credential state to prevent connection conflicts during database-to-database comparisons
+- **Script Generation**: Uses CREATE OR ALTER for procedures/views/functions; ALTER TABLE for safe table changes; destructive changes are blocked/commented
+- **Risk Classification**: Changes are classified as safe, warning, or destructive based on the type of modification
 
 ## Recent Changes
+- **2025-12-04**: Schema Compare Feature Complete
+  - Home screen with Schema Compare and History Compare modes
+  - Full database schema extraction (tables, views, procs, functions, triggers)
+  - Folder parser for SQL script files
+  - Comparison engine with risk classification
+  - Color-coded diff display with filtering
+  - Apply Changes to execute scripts on target database
+  - Save Scripts to export SQL files for git workflows
+  - Refactored History Compare to separate component
+
 - **2025-11-26**: Initial Replit setup
   - Installed all required system dependencies for Electron
   - Configured library paths for mesa/libgbm
@@ -92,3 +125,4 @@ None documented yet.
 - The application displays through VNC, not as a web interface
 - Database connections require external SQL Server access
 - All credentials are stored locally in electron-store
+- Destructive table changes (drop columns/tables) are shown as warnings but not included in executable scripts
