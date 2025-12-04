@@ -177,6 +177,21 @@ class SchemaComparisonService {
     return false;
   }
 
+  private detectColumnAddition(sourceObj: SchemaObject | null, targetObj: SchemaObject | null): Set<string> {
+    const newColumns = new Set<string>();
+    if (!sourceObj || !targetObj) return newColumns;
+    
+    const sourceColumns = this.extractColumnNames(sourceObj.definition);
+    const targetColumns = this.extractColumnNames(targetObj.definition);
+    
+    for (const col of sourceColumns) {
+      if (!targetColumns.has(col)) {
+        newColumns.add(col);
+      }
+    }
+    return newColumns;
+  }
+
   private extractColumnNames(definition: string): Set<string> {
     const columns = new Set<string>();
     const columnRegex = /\[(\w+)\]\s+\[(?:varchar|nvarchar|int|bigint|datetime|bit|decimal|numeric|float|money|text|ntext|char|nchar|uniqueidentifier|date|time|datetime2)/gi;
@@ -233,19 +248,30 @@ class SchemaComparisonService {
 
   private convertToCreateOrAlter(definition: string, objectType: SchemaObjectType): string {
     const keyword = this.getCreateKeyword(objectType);
-    const createRegex = new RegExp(`CREATE\\s+${keyword}`, 'i');
-    const createOrAlterRegex = new RegExp(`CREATE\\s+OR\\s+ALTER\\s+${keyword}`, 'i');
+    const replaceKeyword = this.getReplaceKeyword(objectType);
+    const createRegex = new RegExp(`CREATE\\s+${keyword}`, 'gi');
+    const createOrAlterRegex = new RegExp(`CREATE\\s+OR\\s+ALTER\\s+${keyword}`, 'gi');
     
     if (createOrAlterRegex.test(definition)) {
       return definition;
     }
     
-    return definition.replace(createRegex, `CREATE OR ALTER ${keyword}`);
+    return definition.replace(createRegex, `CREATE OR ALTER ${replaceKeyword}`);
   }
 
   private getCreateKeyword(objectType: SchemaObjectType): string {
     switch (objectType) {
       case 'StoredProcedure': return 'PROC(?:EDURE)?';
+      case 'Function': return 'FUNCTION';
+      case 'View': return 'VIEW';
+      case 'Trigger': return 'TRIGGER';
+      default: return objectType.toUpperCase();
+    }
+  }
+
+  private getReplaceKeyword(objectType: SchemaObjectType): string {
+    switch (objectType) {
+      case 'StoredProcedure': return 'PROCEDURE';
       case 'Function': return 'FUNCTION';
       case 'View': return 'VIEW';
       case 'Trigger': return 'TRIGGER';
