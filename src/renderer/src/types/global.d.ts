@@ -19,6 +19,7 @@ declare global {
       extractSchema: (source: SchemaSource) => Promise<SchemaObject[]>;
       parseFolder: (folderPath: string) => Promise<SchemaObject[]>;
       compareSchemas: (source: SchemaSource, target: SchemaSource) => Promise<ComparisonResult>;
+      executeScripts: (target: SchemaSource, scripts: string[]) => Promise<{ success: boolean; results: string[]; errors: string[] }>;
       saveTextFile: (outputPath: string, content: string) => Promise<{ status: string; message: string }>;
       saveSqlDialog: (defaultFileName: string) => Promise<{ canceled: boolean; filePath?: string }>;
     };

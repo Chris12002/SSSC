@@ -57,14 +57,27 @@ const SchemaCompare: React.FC<SchemaCompareProps> = ({ onBack }) => {
     }
 
     try {
-      const scripts = changes
-        .filter(c => c.riskLevel !== 'destructive')
+      const safeChanges = changes.filter(c => c.riskLevel !== 'destructive');
+      const scripts = safeChanges
         .map(c => c.script)
-        .filter(Boolean)
-        .join('\n\nGO\n\n');
+        .filter((s): s is string => Boolean(s));
 
-      showSnackbar(`Ready to apply ${changes.length} changes. Script execution not yet implemented.`, 'info');
-      console.log('Scripts to apply:', scripts);
+      if (scripts.length === 0) {
+        showSnackbar('No scripts to apply', 'info');
+        return;
+      }
+
+      showSnackbar(`Applying ${scripts.length} changes...`, 'info');
+      
+      const result = await window.api.executeScripts(targetConfig, scripts);
+      
+      if (result.success) {
+        showSnackbar(`Successfully applied ${scripts.length} changes`, 'success');
+      } else {
+        const errorSummary = result.errors.slice(0, 3).join('; ');
+        showSnackbar(`Some changes failed: ${errorSummary}`, 'error');
+        console.error('Apply changes errors:', result.errors);
+      }
     } catch (err: any) {
       showSnackbar(`Failed to apply changes: ${err.message}`, 'error');
     }

@@ -22,12 +22,12 @@ args = "Electron App"
 name = "Electron App"
 author = "agent"
 
+[workflows.workflow.metadata]
+outputType = "vnc"
+
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "LD_LIBRARY_PATH=$HOME/.nix-profile/lib:$HOME/.nix-profile/lib64:$LD_LIBRARY_PATH ELECTRON_DISABLE_SANDBOX=1 npm run dev"
-
-[workflows.workflow.metadata]
-outputType = "vnc"
 
 [[ports]]
 localPort = 5173

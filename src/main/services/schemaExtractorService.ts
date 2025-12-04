@@ -294,6 +294,29 @@ class SchemaExtractorService {
       definition: row.definition || '',
     }));
   }
+
+  public async executeScripts(scripts: string[]): Promise<{ success: boolean; results: string[]; errors: string[] }> {
+    const pool = await this.getPool();
+    const results: string[] = [];
+    const errors: string[] = [];
+
+    for (const script of scripts) {
+      if (!script.trim()) continue;
+      
+      try {
+        await pool.request().batch(script);
+        results.push(`Successfully executed: ${script.substring(0, 50)}...`);
+      } catch (err: any) {
+        errors.push(`Error executing script: ${err.message}`);
+      }
+    }
+
+    return {
+      success: errors.length === 0,
+      results,
+      errors,
+    };
+  }
 }
 
 export default SchemaExtractorService;
