@@ -1,5 +1,5 @@
 const { contextBridge, ipcRenderer } = require('electron');
-import type {ServerLogonFields} from '../shared/types';
+import type {ServerLogonFields, SchemaSource, SchemaObject, ComparisonResult} from '../shared/types';
 
 
 contextBridge.exposeInMainWorld('api', {
@@ -25,4 +25,7 @@ contextBridge.exposeInMainWorld('api', {
   clearStoredCredentials: (sourceId: string) => ipcRenderer.invoke('clear-stored-credentials', sourceId),
   getDatabases: () => ipcRenderer.invoke('get-databases'),
   updateDatabase: (dbName: string) => ipcRenderer.invoke('update-db', dbName),
+  extractSchema: (source: SchemaSource) => ipcRenderer.invoke('extract-schema', source),
+  parseFolder: (folderPath: string) => ipcRenderer.invoke('parse-folder', folderPath),
+  compareSchemas: (source: SchemaSource, target: SchemaSource) => ipcRenderer.invoke('compare-schemas', source, target),
 });

@@ -1,4 +1,4 @@
-import { ServerLogonFields } from "../../../shared/types";
+import { ServerLogonFields, SchemaSource, SchemaObject, ComparisonResult } from "../../../shared/types";
 
 declare global {
   interface Window {
@@ -16,6 +16,9 @@ declare global {
       clearStoredCredentials: (sourceId: string) => Promise<void>;
       getDatabases: () => Promise<string[]>;
       updateDatabase: (dbName: string) => Promise<{ status: string; message: string }>;
+      extractSchema: (source: SchemaSource) => Promise<SchemaObject[]>;
+      parseFolder: (folderPath: string) => Promise<SchemaObject[]>;
+      compareSchemas: (source: SchemaSource, target: SchemaSource) => Promise<ComparisonResult>;
     };
   }
 }

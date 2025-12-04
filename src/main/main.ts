@@ -5,6 +5,8 @@ import Store from 'electron-store';
 import { SchemaSource, ServerLogonFields } from '../shared/types';
 import DatabaseService from './services/databaseService';
 import SchemaExtractorService from './services/schemaExtractorService';
+import FolderParserService from './services/folderParserService';
+import SchemaComparisonService from './services/schemaComparisonService';
 import { saveHtmlFile } from './utils/fileutils';
 import {
   buildCredentialId,
@@ -377,6 +379,16 @@ ipcMain.handle('extract-schema', async (event, source: SchemaSource) => {
   } finally {
     await extractor.disconnect();
   }
+});
+
+ipcMain.handle('parse-folder', async (event, folderPath: string) => {
+  const parser = new FolderParserService();
+  return await parser.parseFolder(folderPath);
+});
+
+ipcMain.handle('compare-schemas', async (event, source: SchemaSource, target: SchemaSource) => {
+  const comparisonService = new SchemaComparisonService();
+  return await comparisonService.compare(source, target);
 });
 
 
