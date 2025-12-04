@@ -7,7 +7,7 @@ import DatabaseService from './services/databaseService';
 import SchemaExtractorService from './services/schemaExtractorService';
 import FolderParserService from './services/folderParserService';
 import SchemaComparisonService from './services/schemaComparisonService';
-import { saveHtmlFile } from './utils/fileutils';
+import { saveHtmlFile, saveTextFile } from './utils/fileutils';
 import {
   buildCredentialId,
   deleteSecret,
@@ -307,6 +307,37 @@ ipcMain.handle('saveHtmlFile', async (event, outputPath: string, diffHtml: strin
       return { status: 'error', message: error };
   }
 
+});
+
+ipcMain.handle('saveTextFile', async (event, outputPath: string, content: string) => {
+  try {
+    const result = await saveTextFile(outputPath, content);
+    return { status: 'success', message: result };
+  } catch (error) {
+      return { status: 'error', message: error };
+  }
+});
+
+ipcMain.handle('show-save-sql-dialog', async (event, defaultFileName: string) => {
+  await persistenceReady;
+  const storage = getStore();
+  const defaultPath =
+    (storage.get('lastSavedDirectory', app.getPath('documents')) as string) || app.getPath('documents');
+
+  const options = {
+    title: 'Save SQL Script',
+    defaultPath: path.join(defaultPath, defaultFileName),
+    filters: [{ name: 'SQL Files', extensions: ['sql'] }],
+  };
+
+  const { canceled, filePath } = await dialog.showSaveDialog(options);
+
+  if (canceled) {
+    return { canceled: true };
+  } else {
+    storage.set('lastSavedDirectory', path.dirname(filePath!));
+    return { canceled: false, filePath };
+  }
 });
 
 // Listen for 'update-db' messages from the renderer process to update the database target.

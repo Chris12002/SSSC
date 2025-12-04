@@ -12,6 +12,10 @@ async function saveFile (outputPath: string, content: string) {
     }
 }
 
+export async function saveTextFile (outputPath: string, content: string) {
+    return await saveFile(outputPath, content);
+}
+
 export async function saveHtmlFile (outputPath: string, content: string) {
     //HTML specific validation
     const isValid = await isValidHtml(content);

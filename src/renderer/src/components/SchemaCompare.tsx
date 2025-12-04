@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
-import { Box, Button, Container, Typography } from '@mui/material';
+import React, { useContext, useState } from 'react';
+import { Box, Button, CircularProgress, Container, Typography } from '@mui/material';
 import Grid from '@mui/material/Grid2';
 import SourceSelector from './SourceSelector';
-import { SchemaSource } from '../../../shared/types';
+import ComparisonResults from './ComparisonResults';
+import { SchemaSource, ComparisonResult, SchemaChange } from '../../../shared/types';
+import { SnackbarContext } from '../contexts/SnackbarContext';
 
 interface SchemaCompareProps {
   onBack: () => void;
@@ -14,25 +16,81 @@ const SchemaCompare: React.FC<SchemaCompareProps> = ({ onBack }) => {
   const [step, setStep] = useState<CompareStep>('select-sources');
   const [sourceConfig, setSourceConfig] = useState<SchemaSource | null>(null);
   const [targetConfig, setTargetConfig] = useState<SchemaSource | null>(null);
+  const [comparisonResult, setComparisonResult] = useState<ComparisonResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const snackbarContext = useContext(SnackbarContext);
+  const { showSnackbar } = snackbarContext!;
 
   const canCompare = sourceConfig !== null && targetConfig !== null;
 
   const handleCompare = async () => {
-    if (!canCompare) return;
+    if (!canCompare || !sourceConfig || !targetConfig) return;
     
     setStep('comparing');
+    setError(null);
     
-    // TODO: Implement actual comparison logic in future tasks
-    // For now, just show a placeholder
-    setTimeout(() => {
+    try {
+      const result = await window.api.compareSchemas(sourceConfig, targetConfig);
+      setComparisonResult(result);
       setStep('results');
-    }, 1000);
+    } catch (err: any) {
+      console.error('Comparison failed:', err);
+      setError(err.message || 'Failed to compare schemas');
+      setStep('select-sources');
+      showSnackbar(`Comparison failed: ${err.message}`, 'error');
+    }
   };
 
   const handleReset = () => {
     setStep('select-sources');
     setSourceConfig(null);
     setTargetConfig(null);
+    setComparisonResult(null);
+    setError(null);
+  };
+
+  const handleApplyChanges = async (changes: SchemaChange[]) => {
+    if (!targetConfig || targetConfig.type !== 'database') {
+      showSnackbar('Cannot apply changes: target is not a database', 'error');
+      return;
+    }
+
+    try {
+      const scripts = changes
+        .filter(c => c.riskLevel !== 'destructive')
+        .map(c => c.script)
+        .filter(Boolean)
+        .join('\n\nGO\n\n');
+
+      showSnackbar(`Ready to apply ${changes.length} changes. Script execution not yet implemented.`, 'info');
+      console.log('Scripts to apply:', scripts);
+    } catch (err: any) {
+      showSnackbar(`Failed to apply changes: ${err.message}`, 'error');
+    }
+  };
+
+  const handleSaveScripts = async (changes: SchemaChange[]) => {
+    try {
+      const scripts = changes
+        .map(c => {
+          const header = `-- ${c.changeType.toUpperCase()}: ${c.objectName} (${c.objectType})\n-- Risk Level: ${c.riskLevel}\n`;
+          return header + (c.script || '-- No script generated');
+        })
+        .join('\n\nGO\n\n');
+
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      const defaultFileName = `schema-changes-${timestamp}.sql`;
+      
+      const result = await window.api.saveSqlDialog(defaultFileName);
+      
+      if (!result.canceled && result.filePath) {
+        await window.api.saveTextFile(result.filePath, scripts);
+        showSnackbar(`Scripts saved to ${result.filePath}`, 'success');
+      }
+    } catch (err: any) {
+      showSnackbar(`Failed to save scripts: ${err.message}`, 'error');
+    }
   };
 
   return (
@@ -53,6 +111,12 @@ const SchemaCompare: React.FC<SchemaCompareProps> = ({ onBack }) => {
               <Typography variant="body1" color="textSecondary" sx={{ mb: 4 }}>
                 Select a source and target to compare. You can compare databases, script folders, or a combination of both.
               </Typography>
+
+              {error && (
+                <Box sx={{ mb: 3, p: 2, bgcolor: 'error.light', borderRadius: 1 }}>
+                  <Typography color="error.contrastText">{error}</Typography>
+                </Box>
+              )}
 
               <Grid container spacing={4}>
                 <Grid size={{ xs: 12, md: 6 }}>
@@ -95,40 +159,26 @@ const SchemaCompare: React.FC<SchemaCompareProps> = ({ onBack }) => {
 
           {step === 'comparing' && (
             <Box textAlign="center" my={8}>
+              <CircularProgress size={48} sx={{ mb: 3 }} />
               <Typography variant="h6" gutterBottom>
                 Comparing schemas...
               </Typography>
               <Typography variant="body2" color="textSecondary">
                 Analyzing {sourceConfig?.name} vs {targetConfig?.name}
               </Typography>
+              <Typography variant="caption" color="textSecondary" display="block" sx={{ mt: 2 }}>
+                This may take a moment for large databases
+              </Typography>
             </Box>
           )}
 
-          {step === 'results' && (
-            <Box my={4}>
-              <Typography variant="h5" gutterBottom>
-                Comparison Results
-              </Typography>
-              <Typography variant="body1" color="textSecondary" sx={{ mb: 4 }}>
-                Source: {sourceConfig?.name} | Target: {targetConfig?.name}
-              </Typography>
-              
-              <Box sx={{ p: 4, bgcolor: 'grey.100', borderRadius: 2, textAlign: 'center' }}>
-                <Typography variant="body1" color="textSecondary">
-                  Schema comparison results will appear here once implemented.
-                </Typography>
-                <Typography variant="body2" color="textSecondary" sx={{ mt: 2 }}>
-                  The comparison engine will extract DDL objects from both sources,
-                  identify differences, and display them with color-coded risk levels.
-                </Typography>
-              </Box>
-
-              <Box textAlign="center" mt={4}>
-                <Button variant="outlined" onClick={handleReset}>
-                  Start New Comparison
-                </Button>
-              </Box>
-            </Box>
+          {step === 'results' && comparisonResult && (
+            <ComparisonResults
+              result={comparisonResult}
+              onReset={handleReset}
+              onApplyChanges={handleApplyChanges}
+              onSaveScripts={handleSaveScripts}
+            />
           )}
         </Box>
       </Container>

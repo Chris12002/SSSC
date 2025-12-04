@@ -28,4 +28,9 @@ contextBridge.exposeInMainWorld('api', {
   extractSchema: (source: SchemaSource) => ipcRenderer.invoke('extract-schema', source),
   parseFolder: (folderPath: string) => ipcRenderer.invoke('parse-folder', folderPath),
   compareSchemas: (source: SchemaSource, target: SchemaSource) => ipcRenderer.invoke('compare-schemas', source, target),
+  saveTextFile: (outputPath: string, content: string) => ipcRenderer.invoke('saveTextFile', outputPath, content),
+  saveSqlDialog: async (defaultFileName: string) => {
+    const result = await ipcRenderer.invoke('show-save-sql-dialog', defaultFileName);
+    return result;
+  },
 });
