@@ -1,5 +1,5 @@
 const { contextBridge, ipcRenderer } = require('electron');
-import type {ServerLogonFields, SchemaSource, SchemaObject, ComparisonResult} from '../shared/types';
+import type { ServerLogonFields, SchemaSource, SchemaObject, ComparisonResult } from '../shared/types';
 
 
 contextBridge.exposeInMainWorld('api', {
@@ -36,6 +36,12 @@ contextBridge.exposeInMainWorld('api', {
   saveTextFile: (outputPath: string, content: string) => ipcRenderer.invoke('saveTextFile', outputPath, content),
   saveSqlDialog: async (defaultFileName: string) => {
     const result = await ipcRenderer.invoke('show-save-sql-dialog', defaultFileName);
+    return result;
+  },
+  generateHtmlReport: (comparisonResult: ComparisonResult) => 
+    ipcRenderer.invoke('generate-html-report', comparisonResult),
+  saveHtmlReportDialog: async (defaultFileName: string) => {
+    const result = await ipcRenderer.invoke('show-save-html-report-dialog', defaultFileName);
     return result;
   },
 });

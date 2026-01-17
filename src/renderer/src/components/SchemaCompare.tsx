@@ -124,6 +124,28 @@ const SchemaCompare: React.FC<SchemaCompareProps> = ({ onBack }) => {
     }
   };
 
+  const handleExportReport = async () => {
+    if (!comparisonResult) return;
+
+    try {
+      showSnackbar('Generating HTML report...', 'info');
+      
+      const htmlContent = await window.api.generateHtmlReport(comparisonResult);
+      
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      const defaultFileName = `schema-comparison-report-${timestamp}.html`;
+      
+      const result = await window.api.saveHtmlReportDialog(defaultFileName);
+      
+      if (!result.canceled && result.filePath) {
+        await window.api.saveHtmlFile(result.filePath, htmlContent);
+        showSnackbar(`Report saved to ${result.filePath}`, 'success');
+      }
+    } catch (err: any) {
+      showSnackbar(`Failed to export report: ${err.message}`, 'error');
+    }
+  };
+
   return (
     <Container maxWidth="xl">
       <Container maxWidth="lg">
@@ -209,6 +231,7 @@ const SchemaCompare: React.FC<SchemaCompareProps> = ({ onBack }) => {
               onReset={handleReset}
               onApplyChanges={handleApplyChanges}
               onSaveScripts={handleSaveScripts}
+              onExportReport={handleExportReport}
               executionOptions={{ useTransaction, stopOnError }}
               onExecutionOptionsChange={(options) => {
                 setUseTransaction(options.useTransaction);

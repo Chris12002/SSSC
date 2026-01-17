@@ -2,11 +2,12 @@ import { app, BrowserWindow, dialog, ipcMain } from 'electron';
 import crypto from 'crypto';
 import path from 'path';
 import Store from 'electron-store';
-import { SchemaSource, ServerLogonFields } from '../shared/types';
+import { SchemaSource, ServerLogonFields, ComparisonResult } from '../shared/types';
 import DatabaseService from './services/databaseService';
 import SchemaExtractorService from './services/schemaExtractorService';
 import FolderParserService from './services/folderParserService';
 import SchemaComparisonService from './services/schemaComparisonService';
+import ReportGeneratorService from './services/reportGeneratorService';
 import { saveHtmlFile, saveTextFile } from './utils/fileutils';
 import {
   buildCredentialId,
@@ -444,6 +445,34 @@ ipcMain.handle('execute-scripts', async (
     return result;
   } finally {
     await extractor.disconnect();
+  }
+});
+
+ipcMain.handle('generate-html-report', async (event, comparisonResult: ComparisonResult) => {
+  const reportGenerator = new ReportGeneratorService();
+  const html = reportGenerator.generateHtmlReport(comparisonResult);
+  return html;
+});
+
+ipcMain.handle('show-save-html-report-dialog', async (event, defaultFileName: string) => {
+  await persistenceReady;
+  const storage = getStore();
+  const defaultPath =
+    (storage.get('lastSavedDirectory', app.getPath('documents')) as string) || app.getPath('documents');
+
+  const options = {
+    title: 'Save Comparison Report',
+    defaultPath: path.join(defaultPath, defaultFileName),
+    filters: [{ name: 'HTML Files', extensions: ['html'] }],
+  };
+
+  const { canceled, filePath } = await dialog.showSaveDialog(options);
+
+  if (canceled) {
+    return { canceled: true };
+  } else {
+    storage.set('lastSavedDirectory', path.dirname(filePath!));
+    return { canceled: false, filePath };
   }
 });
 

@@ -30,6 +30,7 @@ interface ComparisonResultsProps {
   onReset: () => void;
   onApplyChanges: (changes: SchemaChange[]) => void;
   onSaveScripts: (changes: SchemaChange[]) => void;
+  onExportReport: () => void;
   executionOptions: ExecutionOptions;
   onExecutionOptionsChange: (options: ExecutionOptions) => void;
 }
@@ -57,6 +58,7 @@ const ComparisonResults: React.FC<ComparisonResultsProps> = ({
   onReset,
   onApplyChanges,
   onSaveScripts,
+  onExportReport,
   executionOptions,
   onExecutionOptionsChange,
 }) => {
@@ -417,6 +419,13 @@ const ComparisonResults: React.FC<ComparisonResultsProps> = ({
       <Box sx={{ mt: 3, display: 'flex', gap: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
         <Button variant="outlined" onClick={onReset}>
           Start New Comparison
+        </Button>
+        <Button
+          variant="outlined"
+          color="secondary"
+          onClick={onExportReport}
+        >
+          Export Report (HTML)
         </Button>
         <Button
           variant="contained"
