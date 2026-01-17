@@ -40,16 +40,19 @@ class SchemaExtractorService {
   }
 
   public async extractAllObjects(): Promise<SchemaObject[]> {
-    const [tables, views, procs, functions, triggers, indexes] = await Promise.all([
+    const [tables, views, procs, functions, triggers, indexes, sequences, synonyms, userTypes] = await Promise.all([
       this.extractTables(),
       this.extractViews(),
       this.extractStoredProcedures(),
       this.extractFunctions(),
       this.extractTriggers(),
       this.extractIndexes(),
+      this.extractSequences(),
+      this.extractSynonyms(),
+      this.extractUserDefinedTypes(),
     ]);
 
-    return [...tables, ...views, ...procs, ...functions, ...triggers, ...indexes];
+    return [...tables, ...views, ...procs, ...functions, ...triggers, ...indexes, ...sequences, ...synonyms, ...userTypes];
   }
 
   public async extractTables(): Promise<SchemaObject[]> {
@@ -558,6 +561,201 @@ class SchemaExtractorService {
       return firstLine.substring(0, 60) + '...';
     }
     return firstLine;
+  }
+
+  public async extractSequences(): Promise<SchemaObject[]> {
+    const pool = await this.getPool();
+    
+    try {
+      const result = await pool.request().query(`
+        SELECT 
+          seq.name AS sequence_name,
+          s.name AS schema_name,
+          t.name AS data_type,
+          seq.start_value,
+          seq.increment,
+          seq.minimum_value,
+          seq.maximum_value,
+          seq.is_cycling,
+          seq.cache_size,
+          seq.current_value
+        FROM sys.sequences seq
+        INNER JOIN sys.schemas s ON seq.schema_id = s.schema_id
+        INNER JOIN sys.types t ON seq.user_type_id = t.user_type_id
+        ORDER BY s.name, seq.name
+      `);
+
+      return result.recordset.map(row => {
+        let definition = `CREATE SEQUENCE [${row.schema_name}].[${row.sequence_name}]`;
+        definition += `\n  AS [${row.data_type}]`;
+        definition += `\n  START WITH ${row.start_value}`;
+        definition += `\n  INCREMENT BY ${row.increment}`;
+        definition += `\n  MINVALUE ${row.minimum_value}`;
+        definition += `\n  MAXVALUE ${row.maximum_value}`;
+        definition += row.is_cycling ? '\n  CYCLE' : '\n  NO CYCLE';
+        if (row.cache_size && row.cache_size > 0) {
+          definition += `\n  CACHE ${row.cache_size}`;
+        } else {
+          definition += '\n  NO CACHE';
+        }
+        definition += ';';
+
+        return {
+          name: row.sequence_name,
+          schema: row.schema_name,
+          type: 'Sequence' as SchemaObjectType,
+          definition: definition,
+        };
+      });
+    } catch (err: any) {
+      // Sequences are not supported in older SQL Server versions
+      if (err.message.includes('Invalid object name')) {
+        return [];
+      }
+      throw err;
+    }
+  }
+
+  public async extractSynonyms(): Promise<SchemaObject[]> {
+    const pool = await this.getPool();
+    const result = await pool.request().query(`
+      SELECT 
+        syn.name AS synonym_name,
+        s.name AS schema_name,
+        syn.base_object_name
+      FROM sys.synonyms syn
+      INNER JOIN sys.schemas s ON syn.schema_id = s.schema_id
+      ORDER BY s.name, syn.name
+    `);
+
+    return result.recordset.map(row => {
+      const definition = `CREATE SYNONYM [${row.schema_name}].[${row.synonym_name}]\nFOR ${row.base_object_name};`;
+
+      return {
+        name: row.synonym_name,
+        schema: row.schema_name,
+        type: 'Synonym' as SchemaObjectType,
+        definition: definition,
+      };
+    });
+  }
+
+  public async extractUserDefinedTypes(): Promise<SchemaObject[]> {
+    const pool = await this.getPool();
+    
+    // Get both alias types and table types
+    const aliasResult = await pool.request().query(`
+      SELECT 
+        t.name AS type_name,
+        s.name AS schema_name,
+        bt.name AS base_type,
+        t.max_length,
+        t.precision,
+        t.scale,
+        t.is_nullable,
+        'ALIAS' AS type_kind
+      FROM sys.types t
+      INNER JOIN sys.schemas s ON t.schema_id = s.schema_id
+      INNER JOIN sys.types bt ON t.system_type_id = bt.system_type_id AND bt.is_user_defined = 0
+      WHERE t.is_user_defined = 1
+        AND t.is_table_type = 0
+      ORDER BY s.name, t.name
+    `);
+
+    const tableTypeResult = await pool.request().query(`
+      SELECT 
+        tt.name AS type_name,
+        s.name AS schema_name,
+        tt.type_table_object_id
+      FROM sys.table_types tt
+      INNER JOIN sys.schemas s ON tt.schema_id = s.schema_id
+      ORDER BY s.name, tt.name
+    `);
+
+    const objects: SchemaObject[] = [];
+
+    // Process alias types
+    for (const row of aliasResult.recordset) {
+      let definition = `CREATE TYPE [${row.schema_name}].[${row.type_name}]`;
+      definition += `\nFROM ${this.formatBaseType(row)}`;
+      definition += row.is_nullable ? ' NULL' : ' NOT NULL';
+      definition += ';';
+
+      objects.push({
+        name: row.type_name,
+        schema: row.schema_name,
+        type: 'UserDefinedType' as SchemaObjectType,
+        definition: definition,
+      });
+    }
+
+    // Process table types
+    for (const row of tableTypeResult.recordset) {
+      const columnsResult = await pool.request()
+        .input('objectId', sql.Int, row.type_table_object_id)
+        .query(`
+          SELECT 
+            c.name AS column_name,
+            t.name AS data_type,
+            c.max_length,
+            c.precision,
+            c.scale,
+            c.is_nullable,
+            c.column_id
+          FROM sys.columns c
+          INNER JOIN sys.types t ON c.user_type_id = t.user_type_id
+          WHERE c.object_id = @objectId
+          ORDER BY c.column_id
+        `);
+
+      let definition = `CREATE TYPE [${row.schema_name}].[${row.type_name}] AS TABLE (`;
+      
+      const columnDefs: string[] = [];
+      for (const col of columnsResult.recordset) {
+        let colDef = `\n  [${col.column_name}] ${this.formatDataType(col)}`;
+        colDef += col.is_nullable ? ' NULL' : ' NOT NULL';
+        columnDefs.push(colDef);
+      }
+      
+      definition += columnDefs.join(',');
+      definition += '\n);';
+
+      objects.push({
+        name: row.type_name,
+        schema: row.schema_name,
+        type: 'UserDefinedType' as SchemaObjectType,
+        definition: definition,
+      });
+    }
+
+    return objects;
+  }
+
+  private formatBaseType(col: any): string {
+    const typeName = col.base_type.toLowerCase();
+    
+    switch (typeName) {
+      case 'varchar':
+      case 'nvarchar':
+      case 'char':
+      case 'nchar':
+      case 'binary':
+      case 'varbinary':
+        if (col.max_length === -1) {
+          return `[${typeName}](MAX)`;
+        }
+        const length = typeName.startsWith('n') ? col.max_length / 2 : col.max_length;
+        return `[${typeName}](${length})`;
+      case 'decimal':
+      case 'numeric':
+        return `[${typeName}](${col.precision},${col.scale})`;
+      case 'datetime2':
+      case 'datetimeoffset':
+      case 'time':
+        return `[${typeName}](${col.scale})`;
+      default:
+        return `[${typeName}]`;
+    }
   }
 }
 

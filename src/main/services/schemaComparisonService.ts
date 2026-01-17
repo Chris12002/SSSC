@@ -168,6 +168,33 @@ class SchemaComparisonService {
       return 'safe';
     }
 
+    // Sequences - safe to add/modify, warning to remove (might be used)
+    if (objectType === 'Sequence') {
+      if (changeType === 'removed') {
+        return 'warning';
+      }
+      return 'safe';
+    }
+
+    // Synonyms - safe to add/modify, warning to remove
+    if (objectType === 'Synonym') {
+      if (changeType === 'removed') {
+        return 'warning';
+      }
+      return 'safe';
+    }
+
+    // User-defined types - warning for modifications (might affect dependent objects)
+    if (objectType === 'UserDefinedType') {
+      if (changeType === 'removed') {
+        return 'destructive'; // Types might be used by columns/parameters
+      }
+      if (changeType === 'modified') {
+        return 'warning'; // Modifications require dropping dependents first
+      }
+      return 'safe';
+    }
+
     return changeType === 'removed' ? 'warning' : 'safe';
   }
 
@@ -333,6 +360,31 @@ class SchemaComparisonService {
         }
         return definition;
       }
+
+      // Sequences - can be modified or created
+      if (objectType === 'Sequence') {
+        if (changeType === 'modified') {
+          // Drop and recreate for modifications
+          return `-- Recreating modified sequence\nDROP SEQUENCE IF EXISTS [${sourceObj!.schema}].[${sourceObj!.name}];\nGO\n${definition}`;
+        }
+        return definition;
+      }
+
+      // Synonyms - can be modified or created
+      if (objectType === 'Synonym') {
+        if (changeType === 'modified') {
+          return `-- Recreating modified synonym\nDROP SYNONYM IF EXISTS [${sourceObj!.schema}].[${sourceObj!.name}];\nGO\n${definition}`;
+        }
+        return definition;
+      }
+
+      // User-defined types - require special handling
+      if (objectType === 'UserDefinedType') {
+        if (changeType === 'modified') {
+          return `-- WARNING: Modifying user-defined types requires dropping dependent objects first\n-- 1. Identify all columns and parameters using this type\n-- 2. Alter those to use base types\n-- 3. Drop and recreate the type\n-- 4. Alter columns/parameters back to use the type\n\n-- DROP TYPE [${targetObj!.schema}].[${targetObj!.name}];\n-- GO\n-- ${definition.replace(/\n/g, '\n-- ')}`;
+        }
+        return definition;
+      }
       
       return definition;
     }
@@ -381,6 +433,9 @@ class SchemaComparisonService {
       case 'Trigger': return 'TRIGGER';
       case 'Table': return 'TABLE';
       case 'Index': return 'INDEX';
+      case 'Sequence': return 'SEQUENCE';
+      case 'Synonym': return 'SYNONYM';
+      case 'UserDefinedType': return 'TYPE';
       default: return objectType.toUpperCase();
     }
   }
@@ -515,6 +570,9 @@ class SchemaComparisonService {
       if (objectType === 'Table' && changeType === 'modified') {
         return 'This change involves removing columns which may result in data loss.';
       }
+      if (objectType === 'UserDefinedType' && changeType === 'removed') {
+        return 'Dropping a user-defined type will fail if it is used by any columns, parameters, or variables.';
+      }
     }
     
     if (riskLevel === 'warning') {
@@ -523,6 +581,12 @@ class SchemaComparisonService {
       }
       if (objectType === 'Table') {
         return 'Table modifications may affect data integrity. Review carefully before applying.';
+      }
+      if (objectType === 'UserDefinedType' && changeType === 'modified') {
+        return 'Modifying a user-defined type requires dropping and recreating all dependent objects first.';
+      }
+      if (objectType === 'Sequence') {
+        return 'Sequence modifications will reset the current value. Ensure this does not cause conflicts.';
       }
     }
     

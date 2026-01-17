@@ -59,6 +59,14 @@ class FolderParserService {
       { regex: /CREATE\s+(?:OR\s+ALTER\s+)?TRIGGER\s+(?:\[?(\w+)\]?\.)?\[?(\w+)\]?/i, type: 'Trigger' },
       { regex: /CREATE\s+TABLE\s+(?:\[?(\w+)\]?\.)?\[?(\w+)\]?/i, type: 'Table' },
       { regex: /ALTER\s+TABLE\s+(?:\[?(\w+)\]?\.)?\[?(\w+)\]?/i, type: 'Table' },
+      // Index patterns
+      { regex: /CREATE\s+(?:UNIQUE\s+)?(?:CLUSTERED\s+|NONCLUSTERED\s+)?INDEX\s+(?:\[?(\w+)\]?\.)?\[?(\w+)\]?/i, type: 'Index' },
+      // Sequence patterns
+      { regex: /CREATE\s+SEQUENCE\s+(?:\[?(\w+)\]?\.)?\[?(\w+)\]?/i, type: 'Sequence' },
+      // Synonym patterns
+      { regex: /CREATE\s+SYNONYM\s+(?:\[?(\w+)\]?\.)?\[?(\w+)\]?/i, type: 'Synonym' },
+      // User-defined type patterns
+      { regex: /CREATE\s+TYPE\s+(?:\[?(\w+)\]?\.)?\[?(\w+)\]?/i, type: 'UserDefinedType' },
     ];
 
     for (const { regex, type } of patterns) {
@@ -95,6 +103,18 @@ class FolderParserService {
     }
     if (lowerName.includes('_tbl') || lowerName.startsWith('tbl_')) {
       return 'Table';
+    }
+    if (lowerName.includes('_ix') || lowerName.startsWith('ix_') || lowerName.startsWith('idx_')) {
+      return 'Index';
+    }
+    if (lowerName.includes('_seq') || lowerName.startsWith('seq_')) {
+      return 'Sequence';
+    }
+    if (lowerName.includes('_syn') || lowerName.startsWith('syn_')) {
+      return 'Synonym';
+    }
+    if (lowerName.includes('_type') || lowerName.startsWith('udt_') || lowerName.startsWith('tt_')) {
+      return 'UserDefinedType';
     }
     
     return null;
