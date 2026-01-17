@@ -422,7 +422,17 @@ ipcMain.handle('compare-schemas', async (event, source: SchemaSource, target: Sc
   return await comparisonService.compare(source, target);
 });
 
-ipcMain.handle('execute-scripts', async (event, target: SchemaSource, scripts: string[]) => {
+interface ExecuteScriptsOptions {
+  useTransaction?: boolean;
+  stopOnError?: boolean;
+}
+
+ipcMain.handle('execute-scripts', async (
+  event, 
+  target: SchemaSource, 
+  scripts: string[],
+  options?: ExecuteScriptsOptions
+) => {
   if (target.type !== 'database' || !target.credentials || !target.database) {
     throw new Error('Invalid database target configuration');
   }
@@ -430,7 +440,7 @@ ipcMain.handle('execute-scripts', async (event, target: SchemaSource, scripts: s
   const extractor = new SchemaExtractorService();
   try {
     await extractor.connect(target.credentials, target.database);
-    const result = await extractor.executeScripts(scripts);
+    const result = await extractor.executeScripts(scripts, options || {});
     return result;
   } finally {
     await extractor.disconnect();

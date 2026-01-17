@@ -443,27 +443,121 @@ class SchemaExtractorService {
     });
   }
 
-  public async executeScripts(scripts: string[]): Promise<{ success: boolean; results: string[]; errors: string[] }> {
+  /**
+   * Execute scripts with optional transaction wrapping
+   * @param scripts Array of SQL scripts to execute
+   * @param options Execution options
+   * @param options.useTransaction Whether to wrap all scripts in a transaction (default: true - industry standard)
+   * @param options.stopOnError Whether to stop execution on first error (default: true when using transaction)
+   */
+  public async executeScripts(
+    scripts: string[], 
+    options: { useTransaction?: boolean; stopOnError?: boolean } = {}
+  ): Promise<{ success: boolean; results: string[]; errors: string[]; rolledBack?: boolean }> {
     const pool = await this.getPool();
     const results: string[] = [];
     const errors: string[] = [];
-
-    for (const script of scripts) {
-      if (!script.trim()) continue;
-      
-      try {
-        await pool.request().batch(script);
-        results.push(`Successfully executed: ${script.substring(0, 50)}...`);
-      } catch (err: any) {
-        errors.push(`Error executing script: ${err.message}`);
-      }
+    
+    // Industry standard: transactions enabled by default
+    const useTransaction = options.useTransaction !== false;
+    const stopOnError = options.stopOnError !== false;
+    
+    const filteredScripts = scripts.filter(s => s.trim());
+    
+    if (filteredScripts.length === 0) {
+      return { success: true, results: ['No scripts to execute'], errors: [] };
     }
 
-    return {
-      success: errors.length === 0,
-      results,
-      errors,
-    };
+    if (useTransaction) {
+      // Transaction-wrapped execution with rollback on failure
+      const transaction = new sql.Transaction(pool);
+      
+      try {
+        await transaction.begin();
+        results.push('Transaction started');
+        
+        for (let i = 0; i < filteredScripts.length; i++) {
+          const script = filteredScripts[i];
+          try {
+            const request = new sql.Request(transaction);
+            await request.batch(script);
+            results.push(`[${i + 1}/${filteredScripts.length}] Successfully executed: ${this.truncateScript(script)}`);
+          } catch (err: any) {
+            errors.push(`[${i + 1}/${filteredScripts.length}] Error: ${err.message}`);
+            
+            if (stopOnError) {
+              // Rollback the transaction
+              try {
+                await transaction.rollback();
+                results.push('Transaction rolled back due to error');
+                return { 
+                  success: false, 
+                  results, 
+                  errors, 
+                  rolledBack: true 
+                };
+              } catch (rollbackErr: any) {
+                errors.push(`Rollback failed: ${rollbackErr.message}`);
+                return { success: false, results, errors, rolledBack: false };
+              }
+            }
+          }
+        }
+        
+        // All scripts executed successfully (or we continued past errors)
+        if (errors.length === 0) {
+          await transaction.commit();
+          results.push('Transaction committed successfully');
+          return { success: true, results, errors };
+        } else {
+          // We had errors but didn't stop - rollback anyway for safety
+          await transaction.rollback();
+          results.push('Transaction rolled back due to errors');
+          return { success: false, results, errors, rolledBack: true };
+        }
+        
+      } catch (err: any) {
+        errors.push(`Transaction error: ${err.message}`);
+        try {
+          await transaction.rollback();
+        } catch (e) {
+          // Ignore rollback errors
+        }
+        return { success: false, results, errors, rolledBack: true };
+      }
+      
+    } else {
+      // Non-transactional execution (each script runs independently)
+      results.push('Executing without transaction (changes cannot be rolled back)');
+      
+      for (let i = 0; i < filteredScripts.length; i++) {
+        const script = filteredScripts[i];
+        try {
+          await pool.request().batch(script);
+          results.push(`[${i + 1}/${filteredScripts.length}] Successfully executed: ${this.truncateScript(script)}`);
+        } catch (err: any) {
+          errors.push(`[${i + 1}/${filteredScripts.length}] Error: ${err.message}`);
+          
+          if (stopOnError) {
+            return { success: false, results, errors };
+          }
+        }
+      }
+
+      return {
+        success: errors.length === 0,
+        results,
+        errors,
+      };
+    }
+  }
+
+  private truncateScript(script: string): string {
+    const firstLine = script.split('\n').find(line => line.trim() && !line.trim().startsWith('--')) || script;
+    if (firstLine.length > 60) {
+      return firstLine.substring(0, 60) + '...';
+    }
+    return firstLine;
   }
 }
 
