@@ -3,7 +3,7 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './components/App';
-import { ThemeProvider } from '@mui/material/styles';
+import { ThemeProvider, CssBaseline } from '@mui/material';
 import theme from './theme';
 import { SnackbarProvider } from './contexts/SnackbarContext';
 
@@ -13,6 +13,7 @@ const root = createRoot(container!);
 root.render(
   <SnackbarProvider>
     <ThemeProvider theme={theme}>
+      <CssBaseline />
       <App />
     </ThemeProvider>
   </SnackbarProvider>

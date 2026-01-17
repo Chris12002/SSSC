@@ -2,7 +2,7 @@ const path = require('path');
 
 module.exports = {
   mode: 'development', // or 'production'
-  entry: './src/renderer/index.tsx',
+  entry: './src/renderer/src/index.tsx',
   output: {
     path: path.resolve(__dirname, 'dist/renderer'),
     filename: 'bundle.js',
@@ -19,7 +19,7 @@ module.exports = {
         use: {
           loader: 'babel-loader',
           options: {
-            configFile: './src/renderer/babel.config.js',
+            configFile: './babel.config.cjs',
           },
         },
       },

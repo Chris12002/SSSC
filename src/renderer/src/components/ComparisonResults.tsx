@@ -13,8 +13,25 @@ import {
   Select,
   TextField,
   Typography,
+  Paper,
+  Stack,
+  IconButton,
+  Divider,
+  useTheme,
+  alpha
 } from '@mui/material';
 import Grid from '@mui/material/Grid2';
+import SearchIcon from '@mui/icons-material/Search';
+import FilterListIcon from '@mui/icons-material/FilterList';
+import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
+import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import WarningIcon from '@mui/icons-material/Warning';
+import ErrorIcon from '@mui/icons-material/Error';
+import SaveIcon from '@mui/icons-material/Save';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import RestartAltIcon from '@mui/icons-material/RestartAlt';
+
 import { ComparisonResult, SchemaChange, SchemaObjectType, ChangeRiskLevel } from '../../../shared/types';
 
 interface ComparisonResultsProps {
@@ -25,15 +42,15 @@ interface ComparisonResultsProps {
 }
 
 const RISK_COLORS: Record<ChangeRiskLevel, string> = {
-  safe: '#4caf50',
-  warning: '#ff9800',
-  destructive: '#f44336',
+  safe: '#10B981', // Emerald 500
+  warning: '#F59E0B', // Amber 500
+  destructive: '#EF4444', // Red 500
 };
 
-const RISK_LABELS: Record<ChangeRiskLevel, string> = {
-  safe: 'Safe',
-  warning: 'Warning',
-  destructive: 'Destructive',
+const RISK_ICONS: Record<ChangeRiskLevel, React.ReactNode> = {
+  safe: <CheckCircleIcon fontSize="small" />,
+  warning: <WarningIcon fontSize="small" />,
+  destructive: <ErrorIcon fontSize="small" />,
 };
 
 const CHANGE_TYPE_LABELS: Record<string, string> = {
@@ -42,12 +59,53 @@ const CHANGE_TYPE_LABELS: Record<string, string> = {
   modified: 'Modified',
 };
 
+const CHANGE_TYPE_COLORS: Record<string, 'success' | 'error' | 'warning' | 'info'> = {
+  added: 'success',
+  removed: 'error',
+  modified: 'warning',
+};
+
+const StatCard: React.FC<{ label: string; count: number; color: string; icon: React.ReactNode }> = ({ label, count, color, icon }) => (
+  <Paper
+    elevation={0}
+    sx={{
+      p: 2,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      bgcolor: alpha(color, 0.1),
+      border: '1px solid',
+      borderColor: alpha(color, 0.2),
+      borderRadius: 3,
+    }}
+  >
+    <Box>
+      <Typography variant="h4" fontWeight="bold" sx={{ color: color }}>
+        {count}
+      </Typography>
+      <Typography variant="body2" color="text.secondary" fontWeight="500">
+        {label}
+      </Typography>
+    </Box>
+    <Box sx={{ 
+      p: 1.5, 
+      borderRadius: '50%', 
+      bgcolor: alpha(color, 0.2), 
+      color: color,
+      display: 'flex'
+    }}>
+      {icon}
+    </Box>
+  </Paper>
+);
+
 const ComparisonResults: React.FC<ComparisonResultsProps> = ({
   result,
   onReset,
   onApplyChanges,
   onSaveScripts,
 }) => {
+  const theme = useTheme();
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [filterType, setFilterType] = useState<SchemaObjectType | 'all'>('all');
@@ -138,238 +196,275 @@ const ComparisonResults: React.FC<ComparisonResultsProps> = ({
 
   return (
     <Box>
-      <Box sx={{ mb: 4 }}>
-        <Typography variant="h5" gutterBottom>
-          Comparison Results
-        </Typography>
-        <Typography variant="body2" color="textSecondary">
-          Source: {result.source.name} → Target: {result.target.name}
-        </Typography>
-        <Typography variant="caption" color="textSecondary">
-          Compared at {new Date(result.timestamp).toLocaleString()}
-        </Typography>
+      <Box sx={{ mb: 6 }}>
+        <Grid container spacing={2}>
+           <Grid size={{ xs: 12, sm: 3 }}>
+             <StatCard label="Safe Changes" count={stats.safe} color={RISK_COLORS.safe} icon={<CheckCircleIcon />} />
+           </Grid>
+           <Grid size={{ xs: 12, sm: 3 }}>
+             <StatCard label="Warnings" count={stats.warning} color={RISK_COLORS.warning} icon={<WarningIcon />} />
+           </Grid>
+           <Grid size={{ xs: 12, sm: 3 }}>
+             <StatCard label="Destructive" count={stats.destructive} color={RISK_COLORS.destructive} icon={<ErrorIcon />} />
+           </Grid>
+           <Grid size={{ xs: 12, sm: 3 }}>
+             <Paper
+              elevation={0}
+              sx={{
+                p: 2,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                bgcolor: 'background.paper',
+                border: '1px solid',
+                borderColor: 'divider',
+                borderRadius: 3,
+              }}
+            >
+              <Box>
+                <Typography variant="h4" fontWeight="bold" color="text.primary">
+                  {stats.total}
+                </Typography>
+                <Typography variant="body2" color="text.secondary" fontWeight="500">
+                  Total Changes
+                </Typography>
+              </Box>
+              <Box sx={{ p: 1.5, borderRadius: '50%', bgcolor: 'action.hover', color: 'text.secondary', display: 'flex' }}>
+                <FilterListIcon />
+              </Box>
+            </Paper>
+           </Grid>
+        </Grid>
       </Box>
 
-      <Grid container spacing={2} sx={{ mb: 4 }}>
-        <Grid size={{ xs: 12, sm: 3 }}>
-          <Card sx={{ bgcolor: RISK_COLORS.safe, color: 'white' }}>
-            <CardContent sx={{ textAlign: 'center', py: 2 }}>
-              <Typography variant="h4">{stats.safe}</Typography>
-              <Typography variant="body2">Safe Changes</Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid size={{ xs: 12, sm: 3 }}>
-          <Card sx={{ bgcolor: RISK_COLORS.warning, color: 'white' }}>
-            <CardContent sx={{ textAlign: 'center', py: 2 }}>
-              <Typography variant="h4">{stats.warning}</Typography>
-              <Typography variant="body2">Warnings</Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid size={{ xs: 12, sm: 3 }}>
-          <Card sx={{ bgcolor: RISK_COLORS.destructive, color: 'white' }}>
-            <CardContent sx={{ textAlign: 'center', py: 2 }}>
-              <Typography variant="h4">{stats.destructive}</Typography>
-              <Typography variant="body2">Destructive</Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid size={{ xs: 12, sm: 3 }}>
-          <Card sx={{ bgcolor: 'grey.700', color: 'white' }}>
-            <CardContent sx={{ textAlign: 'center', py: 2 }}>
-              <Typography variant="h4">{stats.total}</Typography>
-              <Typography variant="body2">Total Changes</Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-      </Grid>
-
-      <Box sx={{ mb: 3, display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
-        <TextField
-          size="small"
-          placeholder="Search objects..."
-          value={searchText}
-          onChange={(e) => setSearchText(e.target.value)}
-          InputProps={{
-            startAdornment: <InputAdornment position="start">🔍</InputAdornment>,
-          }}
-          sx={{ minWidth: 200 }}
-        />
-        
-        <FormControl size="small" sx={{ minWidth: 150 }}>
-          <InputLabel>Object Type</InputLabel>
-          <Select
-            value={filterType}
-            label="Object Type"
-            onChange={(e) => setFilterType(e.target.value as SchemaObjectType | 'all')}
-          >
-            <MenuItem value="all">All Types</MenuItem>
-            {objectTypes.map((type) => (
-              <MenuItem key={type} value={type}>{type}</MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-
-        <FormControl size="small" sx={{ minWidth: 120 }}>
-          <InputLabel>Risk Level</InputLabel>
-          <Select
-            value={filterRisk}
-            label="Risk Level"
-            onChange={(e) => setFilterRisk(e.target.value as ChangeRiskLevel | 'all')}
-          >
-            <MenuItem value="all">All Levels</MenuItem>
-            <MenuItem value="safe">Safe</MenuItem>
-            <MenuItem value="warning">Warning</MenuItem>
-            <MenuItem value="destructive">Destructive</MenuItem>
-          </Select>
-        </FormControl>
-
-        <Box sx={{ flexGrow: 1 }} />
-
-        <Button size="small" onClick={selectAllSafe}>Select All Safe</Button>
-        <Button size="small" onClick={clearSelection}>Clear Selection</Button>
-      </Box>
-
-      {filteredChanges.length === 0 ? (
-        <Box sx={{ p: 4, bgcolor: 'grey.100', borderRadius: 2, textAlign: 'center' }}>
-          <Typography variant="body1" color="textSecondary">
-            {result.changes.length === 0 
-              ? 'No differences found between source and target.'
-              : 'No changes match the current filters.'}
-          </Typography>
-        </Box>
-      ) : (
-        <Box sx={{ maxHeight: '50vh', overflow: 'auto' }}>
-          {filteredChanges.map((change, index) => {
-            const key = `${change.objectName}-${index}`;
-            const isExpanded = expandedItems.has(key);
-            const isSelected = selectedItems.has(key);
-            const canSelect = change.riskLevel !== 'destructive';
-
-            return (
-              <Card
-                key={key}
-                sx={{
-                  mb: 1,
-                  borderLeft: `4px solid ${RISK_COLORS[change.riskLevel]}`,
-                  bgcolor: isSelected ? 'action.selected' : 'background.paper',
-                  cursor: canSelect ? 'pointer' : 'default',
+      <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 3, overflow: 'hidden' }}>
+        <Box sx={{ p: 2, borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'background.default' }}>
+          <Grid container spacing={2} alignItems="center">
+            <Grid size={{ xs: 12, md: 4 }}>
+              <TextField
+                size="small"
+                fullWidth
+                placeholder="Search objects..."
+                value={searchText}
+                onChange={(e) => setSearchText(e.target.value)}
+                InputProps={{
+                  startAdornment: <InputAdornment position="start"><SearchIcon color="action" /></InputAdornment>,
                 }}
-                onClick={() => canSelect && toggleSelected(key, change)}
-              >
-                <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
-                  <Box display="flex" alignItems="center" justifyContent="space-between">
-                    <Box display="flex" alignItems="center" gap={1}>
-                      {canSelect && (
-                        <Box
+              />
+            </Grid>
+            <Grid size={{ xs: 6, md: 2 }}>
+              <FormControl size="small" fullWidth>
+                <InputLabel>Object Type</InputLabel>
+                <Select
+                  value={filterType}
+                  label="Object Type"
+                  onChange={(e) => setFilterType(e.target.value as SchemaObjectType | 'all')}
+                >
+                  <MenuItem value="all">All Types</MenuItem>
+                  {objectTypes.map((type) => (
+                    <MenuItem key={type} value={type}>{type}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid size={{ xs: 6, md: 2 }}>
+              <FormControl size="small" fullWidth>
+                <InputLabel>Risk Level</InputLabel>
+                <Select
+                  value={filterRisk}
+                  label="Risk Level"
+                  onChange={(e) => setFilterRisk(e.target.value as ChangeRiskLevel | 'all')}
+                >
+                  <MenuItem value="all">All Levels</MenuItem>
+                  <MenuItem value="safe">Safe</MenuItem>
+                  <MenuItem value="warning">Warning</MenuItem>
+                  <MenuItem value="destructive">Destructive</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid size={{ xs: 12, md: 4 }}>
+              <Stack direction="row" spacing={1} justifyContent="flex-end">
+                <Button size="small" onClick={selectAllSafe}>Select Safe</Button>
+                <Button size="small" onClick={clearSelection} color="inherit">Clear</Button>
+              </Stack>
+            </Grid>
+          </Grid>
+        </Box>
+
+        {filteredChanges.length === 0 ? (
+          <Box sx={{ p: 8, textAlign: 'center' }}>
+            <Typography variant="h6" color="text.secondary" gutterBottom>
+              No changes found
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              {result.changes.length === 0 
+                ? 'The source and target schemas are identical.'
+                : 'Try adjusting your filters to see more results.'}
+            </Typography>
+          </Box>
+        ) : (
+          <Box>
+            {filteredChanges.map((change, index) => {
+              const key = `${change.objectName}-${index}`;
+              const isExpanded = expandedItems.has(key);
+              const isSelected = selectedItems.has(key);
+              const canSelect = change.riskLevel !== 'destructive';
+
+              return (
+                <Box key={key} sx={{ borderBottom: '1px solid', borderColor: 'divider', '&:last-child': { borderBottom: 'none' } }}>
+                  <Box 
+                    sx={{ 
+                      p: 2, 
+                      bgcolor: isSelected ? alpha(theme.palette.primary.main, 0.04) : 'background.paper',
+                      transition: 'background-color 0.2s',
+                      cursor: canSelect ? 'pointer' : 'default',
+                      '&:hover': {
+                        bgcolor: isSelected ? alpha(theme.palette.primary.main, 0.08) : 'action.hover',
+                      }
+                    }}
+                    onClick={() => canSelect && toggleSelected(key, change)}
+                  >
+                    <Grid container alignItems="center" spacing={2}>
+                      <Grid size="auto">
+                         <Box
                           sx={{
-                            width: 20,
-                            height: 20,
+                            width: 24,
+                            height: 24,
+                            borderRadius: 1,
                             border: '2px solid',
-                            borderColor: isSelected ? 'primary.main' : 'grey.400',
-                            borderRadius: 0.5,
+                            borderColor: isSelected ? 'primary.main' : 'divider',
                             bgcolor: isSelected ? 'primary.main' : 'transparent',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
                             color: 'white',
-                            fontSize: 14,
+                            visibility: canSelect ? 'visible' : 'hidden',
                           }}
                         >
-                          {isSelected && '✓'}
+                          {isSelected && <CheckCircleIcon sx={{ fontSize: 18 }} />}
+                        </Box>
+                      </Grid>
+                      <Grid size="grow">
+                        <Stack direction="row" alignItems="center" spacing={1.5} mb={0.5}>
+                          <Typography variant="subtitle1" fontWeight="600">
+                            {change.objectName}
+                          </Typography>
+                          <Chip
+                            label={change.objectType}
+                            size="small"
+                            variant="outlined"
+                            sx={{ height: 20, fontSize: '0.7rem', borderRadius: 1 }}
+                          />
+                        </Stack>
+                        <Stack direction="row" alignItems="center" spacing={2}>
+                          <Chip
+                            label={CHANGE_TYPE_LABELS[change.changeType]}
+                            size="small"
+                            color={CHANGE_TYPE_COLORS[change.changeType]}
+                            sx={{ height: 20, fontSize: '0.7rem', fontWeight: 600 }}
+                          />
+                           <Box display="flex" alignItems="center" gap={0.5}>
+                             {RISK_ICONS[change.riskLevel]}
+                             <Typography 
+                               variant="caption" 
+                               fontWeight="600"
+                               sx={{ color: RISK_COLORS[change.riskLevel] }}
+                             >
+                               {change.riskLevel.toUpperCase()}
+                             </Typography>
+                           </Box>
+                        </Stack>
+                      </Grid>
+                      <Grid size="auto">
+                        <IconButton 
+                          size="small"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleExpanded(key);
+                          }}
+                        >
+                          {isExpanded ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
+                        </IconButton>
+                      </Grid>
+                    </Grid>
+
+                     {change.warningMessage && (
+                        <Box mt={1} p={1} bgcolor={alpha(theme.palette.warning.main, 0.1)} borderRadius={1} display="flex" gap={1}>
+                          <WarningIcon fontSize="small" color="warning" />
+                          <Typography variant="caption" color="warning.main">
+                            {change.warningMessage}
+                          </Typography>
                         </Box>
                       )}
-                      <Typography variant="subtitle2" component="span">
-                        {change.objectName}
-                      </Typography>
-                      <Chip
-                        label={change.objectType}
-                        size="small"
-                        sx={{ fontSize: '0.7rem', height: 20 }}
-                      />
-                      <Chip
-                        label={CHANGE_TYPE_LABELS[change.changeType]}
-                        size="small"
-                        color={change.changeType === 'added' ? 'success' : change.changeType === 'removed' ? 'error' : 'warning'}
-                        sx={{ fontSize: '0.7rem', height: 20 }}
-                      />
-                    </Box>
-                    <Box display="flex" alignItems="center" gap={1}>
-                      <Chip
-                        label={RISK_LABELS[change.riskLevel]}
-                        size="small"
-                        sx={{
-                          bgcolor: RISK_COLORS[change.riskLevel],
-                          color: 'white',
-                          fontSize: '0.7rem',
-                          height: 20,
-                        }}
-                      />
-                      <Button
-                        size="small"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleExpanded(key);
+                  </Box>
+                  
+                  <Collapse in={isExpanded}>
+                    <Box sx={{ bgcolor: '#1e1e1e', p: 2, borderTop: '1px solid', borderColor: 'divider' }}>
+                      <Box 
+                        component="pre" 
+                        sx={{ 
+                          m: 0, 
+                          color: '#d4d4d4', 
+                          fontFamily: 'Consolas, "Courier New", monospace', 
+                          fontSize: '0.85rem',
+                          overflowX: 'auto',
+                          maxHeight: 400
                         }}
                       >
-                        {isExpanded ? 'Hide' : 'Show'} Script
-                      </Button>
-                    </Box>
-                  </Box>
-
-                  {change.warningMessage && (
-                    <Typography variant="caption" color="warning.main" sx={{ display: 'block', mt: 0.5 }}>
-                      ⚠️ {change.warningMessage}
-                    </Typography>
-                  )}
-
-                  <Collapse in={isExpanded}>
-                    <Box
-                      sx={{
-                        mt: 2,
-                        p: 2,
-                        bgcolor: 'grey.900',
-                        color: 'grey.100',
-                        borderRadius: 1,
-                        fontFamily: 'monospace',
-                        fontSize: '0.85rem',
-                        whiteSpace: 'pre-wrap',
-                        overflow: 'auto',
-                        maxHeight: 300,
-                      }}
-                    >
-                      {change.script || '-- No script generated'}
+                        {change.script || '-- No script generated'}
+                      </Box>
                     </Box>
                   </Collapse>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </Box>
-      )}
+                </Box>
+              );
+            })}
+          </Box>
+        )}
+      </Paper>
 
-      <Box sx={{ mt: 4, display: 'flex', gap: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
-        <Button variant="outlined" onClick={onReset}>
-          Start New Comparison
-        </Button>
-        <Button
-          variant="contained"
-          color="primary"
-          onClick={handleSave}
-          disabled={selectedItems.size === 0}
-        >
-          Save Scripts ({selectedItems.size})
-        </Button>
-        <Button
-          variant="contained"
-          color="success"
-          onClick={handleApply}
-          disabled={selectedItems.size === 0}
-        >
-          Apply Changes ({selectedItems.size})
-        </Button>
-      </Box>
+      <Paper 
+        elevation={4} 
+        sx={{ 
+          position: 'fixed', 
+          bottom: 32, 
+          left: '50%', 
+          transform: 'translateX(-50%)',
+          zIndex: 100,
+          borderRadius: 50,
+          visibility: selectedItems.size > 0 ? 'visible' : 'hidden',
+          opacity: selectedItems.size > 0 ? 1 : 0,
+          transition: 'all 0.3s',
+        }}
+      >
+        <Box sx={{ p: 1, pl: 3, display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Typography variant="subtitle2" fontWeight="600">
+            {selectedItems.size} changes selected
+          </Typography>
+          <Box display="flex" gap={1}>
+             <Button
+              variant="outlined"
+              color="inherit"
+              startIcon={<SaveIcon />}
+              onClick={handleSave}
+              sx={{ borderRadius: 50 }}
+            >
+              Save Script
+            </Button>
+            <Button
+              variant="contained"
+              color="primary"
+              startIcon={<PlayArrowIcon />}
+              onClick={handleApply}
+              sx={{ borderRadius: 50 }}
+            >
+              Apply Selected
+            </Button>
+          </Box>
+        </Box>
+      </Paper>
+      
+      {/* Floating Action Button for Reset if scrolled down or at bottom? Maybe just keep button at top/bottom */}
+      {/* Keeping "Start New Comparison" at the top or in header might be better, but "Reset" in Props is available. */}
     </Box>
   );
 };

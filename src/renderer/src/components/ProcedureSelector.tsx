@@ -27,7 +27,6 @@ const ProcedureSelector: React.FC<ProcedureSelectorProps> = ({
     renderInput={(params) => (
       <TextField {...params} label="Select Procedure" variant="outlined" />
     )}
-    sx={{ width: 300 }}
   />
   </FormControl>
 

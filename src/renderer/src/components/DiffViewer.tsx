@@ -1,7 +1,8 @@
 // src/components/DiffViewer.tsx
 
-import { Box, Typography, Paper, Button } from '@mui/material';
+import { Box, Typography, Paper, IconButton, useTheme, alpha, Card, CardHeader, CardContent } from '@mui/material';
 import React from 'react';
+import CloseIcon from '@mui/icons-material/Close';
 import { DiffItem } from '../../../shared/types';
 
 interface DiffViewerProps {
@@ -10,28 +11,68 @@ interface DiffViewerProps {
 }
 
 const DiffViewer: React.FC<DiffViewerProps> = ({ diffs, onRemove }) => {
+  const theme = useTheme();
+
   return (
-    <Box my={4} >
-      <Typography variant="h5" gutterBottom>
-        Diff Results
+    <Box my={4}>
+      <Typography variant="h5" gutterBottom fontWeight="600">
+        Comparison Results
       </Typography>
-      <Paper elevation={3} style={{ padding: 16, overflowX: 'auto' }}>
+      <Box display="flex" flexDirection="column" gap={3}>
         {diffs.map((diff) => (
-          <div key={diff.id}>
-            <Button
-              variant="contained"
-              color="secondary"
-              onClick={() => onRemove(diff.id)}
-            >
-              Remove
-            </Button>
-            <Typography variant="h6">{diff.description}</Typography>
-            <div
-              dangerouslySetInnerHTML={{ __html: diff.content }}
+          <Card 
+            key={diff.id} 
+            elevation={0} 
+            sx={{ 
+              border: '1px solid', 
+              borderColor: 'divider',
+              overflow: 'hidden'
+            }}
+          >
+            <CardHeader
+              action={
+                <IconButton 
+                  onClick={() => onRemove(diff.id)} 
+                  size="small"
+                  sx={{ 
+                    bgcolor: 'action.hover',
+                    '&:hover': { bgcolor: 'error.light', color: 'error.contrastText' }
+                  }}
+                >
+                  <CloseIcon fontSize="small" />
+                </IconButton>
+              }
+              title={
+                <Typography variant="subtitle1" fontWeight="bold">
+                  {diff.description}
+                </Typography>
+              }
+              sx={{ 
+                bgcolor: 'background.default', 
+                borderBottom: '1px solid', 
+                borderColor: 'divider',
+                py: 1.5
+              }}
             />
-          </div>
+            <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
+              <Box
+                sx={{
+                  overflowX: 'auto',
+                  '& .d2h-wrapper': {
+                    fontFamily: 'Consolas, "Courier New", monospace',
+                    fontSize: '0.85rem',
+                  },
+                  '& .d2h-file-header': {
+                    display: 'none', // Hide internal file header if redundant
+                  }
+                }}
+              >
+                <div dangerouslySetInnerHTML={{ __html: diff.content }} />
+              </Box>
+            </CardContent>
+          </Card>
         ))}
-      </Paper>
+      </Box>
     </Box>
   );
 };

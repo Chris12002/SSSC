@@ -13,7 +13,17 @@ import {
   Select,
   TextField,
   Typography,
+  Paper,
+  Stack,
+  Chip,
+  InputAdornment,
+  useTheme,
+  alpha
 } from '@mui/material';
+import StorageIcon from '@mui/icons-material/Storage';
+import FolderIcon from '@mui/icons-material/Folder';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import DnsIcon from '@mui/icons-material/Dns';
 import { SchemaSource, SchemaSourceType, ServerLogonFields } from '../../../shared/types';
 import { SnackbarContext } from '../contexts/SnackbarContext';
 import LoginModal from './LoginModal';
@@ -26,6 +36,7 @@ interface SourceSelectorProps {
 }
 
 const SourceSelector: React.FC<SourceSelectorProps> = ({ title, sourceId, source, onSourceChange }) => {
+  const theme = useTheme();
   const [sourceType, setSourceType] = useState<SchemaSourceType>(source?.type || 'database');
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [localCredentials, setLocalCredentials] = useState<ServerLogonFields | null>(null);
@@ -146,68 +157,123 @@ const SourceSelector: React.FC<SourceSelectorProps> = ({ title, sourceId, source
   };
 
   return (
-    <Card elevation={3}>
-      <CardContent>
-        <Typography variant="h6" gutterBottom>
+    <Card 
+      elevation={0} 
+      sx={{ 
+        height: '100%', 
+        border: '1px solid', 
+        borderColor: source ? 'primary.main' : 'divider',
+        transition: 'border-color 0.2s',
+        display: 'flex',
+        flexDirection: 'column'
+      }}
+    >
+      <Box sx={{ 
+        p: 2, 
+        borderBottom: '1px solid', 
+        borderColor: 'divider',
+        bgcolor: 'background.default',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between'
+      }}>
+        <Typography variant="subtitle1" fontWeight="bold">
           {title}
         </Typography>
+        {source && (
+          <Chip 
+            icon={<CheckCircleIcon />} 
+            label="Ready" 
+            size="small" 
+            color="success" 
+            variant="outlined" 
+          />
+        )}
+      </Box>
 
-        <FormControl component="fieldset" sx={{ mb: 2 }}>
+      <CardContent sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 3 }}>
+        <FormControl component="fieldset">
           <RadioGroup row value={sourceType} onChange={handleTypeChange}>
-            <FormControlLabel value="database" control={<Radio />} label="Database" />
-            <FormControlLabel value="folder" control={<Radio />} label="Scripts Folder" />
+            <FormControlLabel 
+              value="database" 
+              control={<Radio />} 
+              label={
+                <Box display="flex" alignItems="center" gap={1}>
+                  <StorageIcon fontSize="small" color={sourceType === 'database' ? 'primary' : 'disabled'} />
+                  <Typography variant="body2">Database</Typography>
+                </Box>
+              } 
+              sx={{ mr: 4 }}
+            />
+            <FormControlLabel 
+              value="folder" 
+              control={<Radio />} 
+              label={
+                 <Box display="flex" alignItems="center" gap={1}>
+                  <FolderIcon fontSize="small" color={sourceType === 'folder' ? 'primary' : 'disabled'} />
+                  <Typography variant="body2">Scripts Folder</Typography>
+                </Box>
+              } 
+            />
           </RadioGroup>
         </FormControl>
 
         {sourceType === 'database' && (
-          <Box>
-            <Box display="flex" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-              <Typography variant="body2" color="textSecondary">
-                {storedCredentials?.saveCredentials
-                  ? `Saved credentials for ${storedCredentials.server} (${storedCredentials.username})`
-                  : 'No saved credentials for this source'}
-              </Typography>
-              {storedCredentials?.saveCredentials && (
-                <Button
-                  variant="text"
-                  size="small"
-                  onClick={handleClearStoredCredentials}
-                  disabled={isLoading}
-                >
-                  Clear Saved Credentials
-                </Button>
-              )}
-            </Box>
+          <Stack spacing={2}>
             {!isConnected ? (
-              <Box>
-                <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
-                  {localCredentials
-                    ? `Server: ${localCredentials.server}`
-                    : 'No credentials configured'}
-                </Typography>
-                <Button 
-                  variant="outlined" 
-                  onClick={handleConnectDatabase}
-                  disabled={isLoading}
-                  sx={{ mr: 1 }}
-                >
-                  {isLoading ? 'Connecting...' : 'Connect'}
-                </Button>
-                <Button 
-                  variant="text" 
-                  onClick={() => setIsLoginOpen(true)}
-                  disabled={isLoading}
-                >
-                  Change Credentials
-                </Button>
+              <Box p={2} borderRadius={2} bgcolor="background.default" border="1px dashed" borderColor="divider">
+                <Box display="flex" flexDirection="column" gap={2} alignItems="center" justifyContent="center" py={2}>
+                  <DnsIcon color="action" sx={{ fontSize: 40, opacity: 0.5 }} />
+                  <Box textAlign="center">
+                    <Typography variant="body2" fontWeight="600" gutterBottom>
+                      {localCredentials ? localCredentials.server : 'No Server Configured'}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {localCredentials ? `User: ${localCredentials.username}` : 'Connect to a database server to select a schema'}
+                    </Typography>
+                  </Box>
+                  <Box display="flex" gap={1}>
+                    <Button 
+                      variant="contained" 
+                      onClick={handleConnectDatabase}
+                      disabled={isLoading}
+                      size="small"
+                    >
+                      {isLoading ? 'Connecting...' : 'Connect'}
+                    </Button>
+                    <Button 
+                      variant="outlined" 
+                      onClick={() => setIsLoginOpen(true)}
+                      disabled={isLoading}
+                      size="small"
+                    >
+                      Configure
+                    </Button>
+                  </Box>
+                </Box>
               </Box>
             ) : (
-              <Box>
-                <Typography variant="body2" color="success.main" sx={{ mb: 2 }}>
-                  Connected to: {localCredentials?.server}
-                  {localCredentials?.username ? ` as ${localCredentials.username}` : ''}
-                </Typography>
-                <FormControl fullWidth sx={{ mb: 2 }}>
+              <Stack spacing={2}>
+                <Box display="flex" alignItems="center" justifyContent="space-between" bgcolor="success.light" p={1.5} borderRadius={1} sx={{ bgOpacity: 0.1 }}>
+                  <Typography variant="body2" color="success.dark" fontWeight="500">
+                     Connected: {localCredentials?.server}
+                  </Typography>
+                  <Button 
+                    size="small" 
+                    color="inherit" 
+                    onClick={() => {
+                      setIsConnected(false);
+                      setSelectedDatabase('');
+                      setDatabases([]);
+                      onSourceChange(null);
+                    }}
+                    sx={{ minWidth: 'auto' }}
+                  >
+                    Disconnect
+                  </Button>
+                </Box>
+
+                <FormControl fullWidth size="medium">
                   <InputLabel>{databaseLabel}</InputLabel>
                   <Select
                     value={selectedDatabase}
@@ -224,44 +290,45 @@ const SourceSelector: React.FC<SourceSelectorProps> = ({ title, sourceId, source
                     ))}
                   </Select>
                 </FormControl>
-                <Button 
-                  variant="text" 
-                  size="small"
-                  onClick={() => {
-                    setIsConnected(false);
-                    setSelectedDatabase('');
-                    setDatabases([]);
-                    onSourceChange(null);
-                  }}
-                >
-                  Disconnect
-                </Button>
-              </Box>
+              </Stack>
             )}
-          </Box>
+
+            {storedCredentials?.saveCredentials && (
+              <Button
+                variant="text"
+                size="small"
+                color="error"
+                onClick={handleClearStoredCredentials}
+                disabled={isLoading}
+                sx={{ alignSelf: 'flex-start' }}
+              >
+                Clear Saved Credentials
+              </Button>
+            )}
+          </Stack>
         )}
 
         {sourceType === 'folder' && (
           <Box>
-            <TextField
+             <TextField
               fullWidth
               label="Folder Path"
               value={folderPath}
-              InputProps={{ readOnly: true }}
+              InputProps={{ 
+                readOnly: true,
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <FolderIcon color="action" />
+                  </InputAdornment>
+                )
+              }}
               placeholder="No folder selected"
               sx={{ mb: 2 }}
+              onClick={handleSelectFolder}
             />
-            <Button variant="outlined" onClick={handleSelectFolder}>
-              Browse...
+            <Button variant="outlined" fullWidth onClick={handleSelectFolder}>
+              Browse Folder...
             </Button>
-          </Box>
-        )}
-
-        {source && (
-          <Box sx={{ mt: 2, p: 1, bgcolor: 'success.light', borderRadius: 1 }}>
-            <Typography variant="body2" sx={{ color: 'success.contrastText' }}>
-              Selected: {source.name}
-            </Typography>
           </Box>
         )}
 
