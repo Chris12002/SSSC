@@ -14,6 +14,7 @@ import { SnackbarContext } from '../contexts/SnackbarContext';
 import LoginModal from './LoginModal';
 import { DiffItem, ServerLogonFields } from '../../../shared/types';
 import DatabaseSelector from './DatabaseSelector';
+import ThemeToggle from './ThemeToggle';
 
 interface HistoryCompareProps {
   onBack: () => void;
@@ -254,6 +255,9 @@ const HistoryCompare: React.FC<HistoryCompareProps> = ({ onBack }) => {
           <Typography variant="body2" color="text.secondary">
             Compare historical versions of stored procedures
           </Typography>
+        </Box>
+        <Box sx={{ ml: 'auto' }}>
+          <ThemeToggle />
         </Box>
       </Paper>
 

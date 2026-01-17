@@ -16,6 +16,7 @@ import {
 import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
 import HistoryIcon from '@mui/icons-material/History';
 import StorageIcon from '@mui/icons-material/Storage';
+import ThemeToggle from './ThemeToggle';
 
 export type AppMode = 'home' | 'schema-compare' | 'history-compare';
 
@@ -113,6 +114,9 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onSelectMode }) => {
       flexDirection: 'column',
       background: `radial-gradient(circle at 50% 0%, ${alpha(theme.palette.primary.main, 0.03)} 0%, transparent 50%)`
     }}>
+      <Box sx={{ position: 'absolute', top: 16, right: 16 }}>
+        <ThemeToggle />
+      </Box>
       <Container maxWidth="lg" sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', py: 8 }}>
         <Box textAlign="center" mb={10} sx={{ animation: 'fadeIn 0.8s ease-out' }}>
           <Stack direction="row" alignItems="center" justifyContent="center" spacing={2} mb={2}>

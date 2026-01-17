@@ -4,6 +4,7 @@ import Grid from '@mui/material/Grid2';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import SourceSelector from './SourceSelector';
 import ComparisonResults from './ComparisonResults';
+import ThemeToggle from './ThemeToggle';
 import { SchemaSource, ComparisonResult, SchemaChange } from '../../../shared/types';
 import { SnackbarContext } from '../contexts/SnackbarContext';
 
@@ -137,6 +138,9 @@ const SchemaCompare: React.FC<SchemaCompareProps> = ({ onBack }) => {
           <Typography variant="body2" color="text.secondary">
             Compare schemas and generate synchronization scripts
           </Typography>
+        </Box>
+        <Box sx={{ ml: 'auto' }}>
+          <ThemeToggle />
         </Box>
       </Paper>
 
