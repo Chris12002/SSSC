@@ -160,6 +160,41 @@ class SchemaComparisonService {
       return 'safe';
     }
 
+    // Indexes are generally safe to add/modify/remove
+    if (objectType === 'Index') {
+      if (changeType === 'removed') {
+        return 'warning'; // Removing an index might affect query performance
+      }
+      return 'safe';
+    }
+
+    // Sequences - safe to add/modify, warning to remove (might be used)
+    if (objectType === 'Sequence') {
+      if (changeType === 'removed') {
+        return 'warning';
+      }
+      return 'safe';
+    }
+
+    // Synonyms - safe to add/modify, warning to remove
+    if (objectType === 'Synonym') {
+      if (changeType === 'removed') {
+        return 'warning';
+      }
+      return 'safe';
+    }
+
+    // User-defined types - warning for modifications (might affect dependent objects)
+    if (objectType === 'UserDefinedType') {
+      if (changeType === 'removed') {
+        return 'destructive'; // Types might be used by columns/parameters
+      }
+      if (changeType === 'modified') {
+        return 'warning'; // Modifications require dropping dependents first
+      }
+      return 'safe';
+    }
+
     return changeType === 'removed' ? 'warning' : 'safe';
   }
 
@@ -194,7 +229,7 @@ class SchemaComparisonService {
 
   private extractColumnNames(definition: string): Set<string> {
     const columns = new Set<string>();
-    const columnRegex = /\[(\w+)\]\s+\[(?:varchar|nvarchar|int|bigint|datetime|bit|decimal|numeric|float|money|text|ntext|char|nchar|uniqueidentifier|date|time|datetime2)/gi;
+    const columnRegex = /\[(\w+)\]\s+\[(?:varchar|nvarchar|int|bigint|datetime|bit|decimal|numeric|float|money|text|ntext|char|nchar|uniqueidentifier|date|time|datetime2|smallint|tinyint|real|smallmoney|smalldatetime|image|xml|varbinary|binary|timestamp|rowversion|sql_variant|geography|geometry|hierarchyid)/gi;
     let match;
     while ((match = columnRegex.exec(definition)) !== null) {
       columns.add(match[1].toLowerCase());
@@ -202,9 +237,76 @@ class SchemaComparisonService {
     return columns;
   }
 
+  /**
+   * Extracts column definitions with their full type information
+   * Returns a Map of column name -> full type definition string
+   */
+  private extractColumnDefinitions(definition: string): Map<string, string> {
+    const columns = new Map<string, string>();
+    // Match column name followed by type with optional size/precision, nullability, identity, and default
+    const columnRegex = /\[(\w+)\]\s+(\[[^\]]+\](?:\([^)]*\))?)\s*(IDENTITY\([^)]+\))?\s*(NULL|NOT NULL)?/gi;
+    let match;
+    while ((match = columnRegex.exec(definition)) !== null) {
+      const columnName = match[1].toLowerCase();
+      const dataType = match[2].toLowerCase();
+      const identity = match[3] ? match[3].toLowerCase() : '';
+      const nullability = match[4] ? match[4].toLowerCase() : '';
+      // Normalize the type definition
+      const fullDef = `${dataType}${identity ? ' ' + identity : ''}${nullability ? ' ' + nullability : ''}`.trim();
+      columns.set(columnName, fullDef);
+    }
+    return columns;
+  }
+
   private detectDataTypeChange(sourceObj: SchemaObject | null, targetObj: SchemaObject | null): boolean {
     if (!sourceObj || !targetObj) return false;
+    
+    const sourceColumns = this.extractColumnDefinitions(sourceObj.definition);
+    const targetColumns = this.extractColumnDefinitions(targetObj.definition);
+    
+    // Check for datatype changes in columns that exist in both
+    for (const [colName, sourceType] of sourceColumns) {
+      const targetType = targetColumns.get(colName);
+      if (targetType && sourceType !== targetType) {
+        return true;
+      }
+    }
     return false;
+  }
+
+  /**
+   * Gets detailed information about what changed in table columns
+   */
+  private getColumnChanges(sourceObj: SchemaObject, targetObj: SchemaObject): {
+    added: string[];
+    removed: string[];
+    modified: Array<{ column: string; from: string; to: string }>;
+  } {
+    const sourceColumns = this.extractColumnDefinitions(sourceObj.definition);
+    const targetColumns = this.extractColumnDefinitions(targetObj.definition);
+    
+    const added: string[] = [];
+    const removed: string[] = [];
+    const modified: Array<{ column: string; from: string; to: string }> = [];
+    
+    // Find added and modified columns
+    for (const [colName, sourceType] of sourceColumns) {
+      const targetType = targetColumns.get(colName);
+      if (!targetType) {
+        added.push(colName);
+      } else if (sourceType !== targetType) {
+        modified.push({ column: colName, from: targetType, to: sourceType });
+      }
+    }
+    
+    // Find removed columns
+    for (const colName of targetColumns.keys()) {
+      if (!sourceColumns.has(colName)) {
+        removed.push(colName);
+      }
+    }
+    
+    return { added, removed, modified };
   }
 
   private generateScript(
@@ -222,6 +324,14 @@ class SchemaComparisonService {
       if (objectType === 'Table') {
         return `-- WARNING: DROP TABLE is blocked\n-- DROP TABLE [${targetObj!.schema}].[${targetObj!.name}];`;
       }
+      if (objectType === 'Index') {
+        // For indexes, we need to extract the table name from the definition
+        const tableMatch = targetObj!.definition.match(/ON\s+\[([^\]]+)\]\.\[([^\]]+)\]/i);
+        if (tableMatch) {
+          return `DROP INDEX [${targetObj!.name}] ON [${tableMatch[1]}].[${tableMatch[2]}];`;
+        }
+        return `-- Unable to generate DROP INDEX statement - table name not found`;
+      }
       const dropType = this.getDropKeyword(objectType);
       return `DROP ${dropType} IF EXISTS [${targetObj!.schema}].[${targetObj!.name}];`;
     }
@@ -238,6 +348,42 @@ class SchemaComparisonService {
           return definition;
         }
         return this.generateTableAlterScript(sourceObj!, targetObj!);
+      }
+      
+      if (objectType === 'Index') {
+        if (changeType === 'modified') {
+          // For modified indexes, drop and recreate
+          const tableMatch = targetObj!.definition.match(/ON\s+\[([^\]]+)\]\.\[([^\]]+)\]/i);
+          if (tableMatch) {
+            return `-- Recreating modified index\nDROP INDEX IF EXISTS [${targetObj!.name}] ON [${tableMatch[1]}].[${tableMatch[2]}];\nGO\n${definition}`;
+          }
+        }
+        return definition;
+      }
+
+      // Sequences - can be modified or created
+      if (objectType === 'Sequence') {
+        if (changeType === 'modified') {
+          // Drop and recreate for modifications
+          return `-- Recreating modified sequence\nDROP SEQUENCE IF EXISTS [${sourceObj!.schema}].[${sourceObj!.name}];\nGO\n${definition}`;
+        }
+        return definition;
+      }
+
+      // Synonyms - can be modified or created
+      if (objectType === 'Synonym') {
+        if (changeType === 'modified') {
+          return `-- Recreating modified synonym\nDROP SYNONYM IF EXISTS [${sourceObj!.schema}].[${sourceObj!.name}];\nGO\n${definition}`;
+        }
+        return definition;
+      }
+
+      // User-defined types - require special handling
+      if (objectType === 'UserDefinedType') {
+        if (changeType === 'modified') {
+          return `-- WARNING: Modifying user-defined types requires dropping dependent objects first\n-- 1. Identify all columns and parameters using this type\n-- 2. Alter those to use base types\n-- 3. Drop and recreate the type\n-- 4. Alter columns/parameters back to use the type\n\n-- DROP TYPE [${targetObj!.schema}].[${targetObj!.name}];\n-- GO\n-- ${definition.replace(/\n/g, '\n-- ')}`;
+        }
+        return definition;
       }
       
       return definition;
@@ -286,36 +432,130 @@ class SchemaComparisonService {
       case 'View': return 'VIEW';
       case 'Trigger': return 'TRIGGER';
       case 'Table': return 'TABLE';
+      case 'Index': return 'INDEX';
+      case 'Sequence': return 'SEQUENCE';
+      case 'Synonym': return 'SYNONYM';
+      case 'UserDefinedType': return 'TYPE';
       default: return objectType.toUpperCase();
     }
   }
 
   private generateTableAlterScript(sourceObj: SchemaObject, targetObj: SchemaObject): string {
-    const sourceColumns = this.extractColumnNames(sourceObj.definition);
-    const targetColumns = this.extractColumnNames(targetObj.definition);
+    const changes = this.getColumnChanges(sourceObj, targetObj);
+    const sourceColDefs = this.extractColumnDefinitions(sourceObj.definition);
     
     const scripts: string[] = [];
     scripts.push(`-- Table modification: [${sourceObj.schema}].[${sourceObj.name}]`);
+    scripts.push(`-- Generated at: ${new Date().toISOString()}`);
+    scripts.push('');
     
-    for (const col of sourceColumns) {
-      if (!targetColumns.has(col)) {
-        scripts.push(`-- New column detected, manual ALTER TABLE ADD required`);
-        break;
+    // Handle added columns
+    if (changes.added.length > 0) {
+      scripts.push('-- New columns to add:');
+      for (const col of changes.added) {
+        const colDef = sourceColDefs.get(col);
+        if (colDef) {
+          // Parse the column definition to build proper ALTER TABLE ADD
+          scripts.push(`ALTER TABLE [${sourceObj.schema}].[${sourceObj.name}] ADD [${col}] ${colDef};`);
+        }
       }
+      scripts.push('');
     }
     
-    for (const col of targetColumns) {
-      if (!sourceColumns.has(col)) {
-        scripts.push(`-- WARNING: Column removal detected - manual review required`);
+    // Handle modified columns (datatype changes)
+    if (changes.modified.length > 0) {
+      scripts.push('-- Column datatype changes (review carefully - may cause data loss):');
+      for (const mod of changes.modified) {
+        scripts.push(`-- Column [${mod.column}]: ${mod.from} -> ${mod.to}`);
+        const newDef = sourceColDefs.get(mod.column);
+        if (newDef) {
+          // Extract just the datatype part for ALTER COLUMN
+          const typeMatch = newDef.match(/^(\[[^\]]+\](?:\([^)]*\))?)/);
+          const nullMatch = newDef.match(/(NULL|NOT NULL)/i);
+          if (typeMatch) {
+            const alterType = typeMatch[1];
+            const nullability = nullMatch ? nullMatch[1].toUpperCase() : 'NULL';
+            scripts.push(`ALTER TABLE [${sourceObj.schema}].[${sourceObj.name}] ALTER COLUMN [${mod.column}] ${alterType} ${nullability};`);
+          }
+        }
+      }
+      scripts.push('');
+    }
+    
+    // Handle removed columns (commented out - destructive)
+    if (changes.removed.length > 0) {
+      scripts.push('-- WARNING: Column removal detected - manual review required');
+      scripts.push('-- The following DROP COLUMN statements are commented for safety:');
+      for (const col of changes.removed) {
         scripts.push(`-- ALTER TABLE [${targetObj.schema}].[${targetObj.name}] DROP COLUMN [${col}];`);
       }
+      scripts.push('');
     }
     
-    if (scripts.length === 1) {
-      scripts.push(`-- Definition changes detected - manual review recommended`);
+    // Check for constraint changes
+    const constraintChanges = this.detectConstraintChanges(sourceObj, targetObj);
+    if (constraintChanges.length > 0) {
+      scripts.push('-- Constraint changes detected:');
+      scripts.push(...constraintChanges);
+      scripts.push('');
+    }
+    
+    if (scripts.length <= 3) {
+      scripts.push('-- Other definition changes detected - manual review recommended');
     }
     
     return scripts.join('\n');
+  }
+
+  /**
+   * Detects changes in constraints (PRIMARY KEY, FOREIGN KEY) between source and target
+   */
+  private detectConstraintChanges(sourceObj: SchemaObject, targetObj: SchemaObject): string[] {
+    const scripts: string[] = [];
+    
+    // Extract constraints from definitions
+    const sourceConstraints = this.extractConstraints(sourceObj.definition);
+    const targetConstraints = this.extractConstraints(targetObj.definition);
+    
+    // Find added constraints
+    for (const [name, def] of sourceConstraints) {
+      if (!targetConstraints.has(name)) {
+        scripts.push(`-- New constraint: ${name}`);
+        scripts.push(`-- ${def}`);
+      } else if (targetConstraints.get(name) !== def) {
+        scripts.push(`-- Modified constraint: ${name}`);
+        scripts.push(`-- From: ${targetConstraints.get(name)}`);
+        scripts.push(`-- To: ${def}`);
+      }
+    }
+    
+    // Find removed constraints
+    for (const [name, def] of targetConstraints) {
+      if (!sourceConstraints.has(name)) {
+        scripts.push(`-- Removed constraint: ${name}`);
+        scripts.push(`-- ${def}`);
+      }
+    }
+    
+    return scripts;
+  }
+
+  /**
+   * Extracts constraint definitions from a CREATE TABLE statement
+   */
+  private extractConstraints(definition: string): Map<string, string> {
+    const constraints = new Map<string, string>();
+    
+    // Match CONSTRAINT definitions
+    const constraintRegex = /CONSTRAINT\s+\[([^\]]+)\]\s+(PRIMARY KEY|FOREIGN KEY|UNIQUE|CHECK)\s*([^,\n]+)/gi;
+    let match;
+    while ((match = constraintRegex.exec(definition)) !== null) {
+      const name = match[1].toLowerCase();
+      const fullDef = match[0].trim();
+      constraints.set(name, fullDef);
+    }
+    
+    return constraints;
   }
 
   private getWarningMessage(
@@ -330,6 +570,9 @@ class SchemaComparisonService {
       if (objectType === 'Table' && changeType === 'modified') {
         return 'This change involves removing columns which may result in data loss.';
       }
+      if (objectType === 'UserDefinedType' && changeType === 'removed') {
+        return 'Dropping a user-defined type will fail if it is used by any columns, parameters, or variables.';
+      }
     }
     
     if (riskLevel === 'warning') {
@@ -338,6 +581,12 @@ class SchemaComparisonService {
       }
       if (objectType === 'Table') {
         return 'Table modifications may affect data integrity. Review carefully before applying.';
+      }
+      if (objectType === 'UserDefinedType' && changeType === 'modified') {
+        return 'Modifying a user-defined type requires dropping and recreating all dependent objects first.';
+      }
+      if (objectType === 'Sequence') {
+        return 'Sequence modifications will reset the current value. Ensure this does not cause conflicts.';
       }
     }
     

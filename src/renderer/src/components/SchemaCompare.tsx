@@ -1,5 +1,14 @@
 import React, { useContext, useState } from 'react';
-import { Box, Button, CircularProgress, Container, Typography } from '@mui/material';
+import { 
+  Box, 
+  Button, 
+  CircularProgress, 
+  Container, 
+  FormControlLabel, 
+  Switch, 
+  Tooltip, 
+  Typography 
+} from '@mui/material';
 import Grid from '@mui/material/Grid2';
 import SourceSelector from './SourceSelector';
 import ComparisonResults from './ComparisonResults';
@@ -18,6 +27,10 @@ const SchemaCompare: React.FC<SchemaCompareProps> = ({ onBack }) => {
   const [targetConfig, setTargetConfig] = useState<SchemaSource | null>(null);
   const [comparisonResult, setComparisonResult] = useState<ComparisonResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  
+  // Transaction options - enabled by default (industry standard)
+  const [useTransaction, setUseTransaction] = useState<boolean>(true);
+  const [stopOnError, setStopOnError] = useState<boolean>(true);
 
   const snackbarContext = useContext(SnackbarContext);
   const { showSnackbar } = snackbarContext!;
@@ -67,15 +80,20 @@ const SchemaCompare: React.FC<SchemaCompareProps> = ({ onBack }) => {
         return;
       }
 
-      showSnackbar(`Applying ${scripts.length} changes...`, 'info');
+      const transactionMsg = useTransaction ? ' (with transaction)' : ' (without transaction)';
+      showSnackbar(`Applying ${scripts.length} changes${transactionMsg}...`, 'info');
       
-      const result = await window.api.executeScripts(targetConfig, scripts);
+      const result = await window.api.executeScripts(targetConfig, scripts, {
+        useTransaction,
+        stopOnError,
+      });
       
       if (result.success) {
         showSnackbar(`Successfully applied ${scripts.length} changes`, 'success');
       } else {
+        const rollbackMsg = result.rolledBack ? ' (all changes rolled back)' : '';
         const errorSummary = result.errors.slice(0, 3).join('; ');
-        showSnackbar(`Some changes failed: ${errorSummary}`, 'error');
+        showSnackbar(`Changes failed${rollbackMsg}: ${errorSummary}`, 'error');
         console.error('Apply changes errors:', result.errors);
       }
     } catch (err: any) {
@@ -103,6 +121,28 @@ const SchemaCompare: React.FC<SchemaCompareProps> = ({ onBack }) => {
       }
     } catch (err: any) {
       showSnackbar(`Failed to save scripts: ${err.message}`, 'error');
+    }
+  };
+
+  const handleExportReport = async () => {
+    if (!comparisonResult) return;
+
+    try {
+      showSnackbar('Generating HTML report...', 'info');
+      
+      const htmlContent = await window.api.generateHtmlReport(comparisonResult);
+      
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      const defaultFileName = `schema-comparison-report-${timestamp}.html`;
+      
+      const result = await window.api.saveHtmlReportDialog(defaultFileName);
+      
+      if (!result.canceled && result.filePath) {
+        await window.api.saveHtmlFile(result.filePath, htmlContent);
+        showSnackbar(`Report saved to ${result.filePath}`, 'success');
+      }
+    } catch (err: any) {
+      showSnackbar(`Failed to export report: ${err.message}`, 'error');
     }
   };
 
@@ -191,6 +231,12 @@ const SchemaCompare: React.FC<SchemaCompareProps> = ({ onBack }) => {
               onReset={handleReset}
               onApplyChanges={handleApplyChanges}
               onSaveScripts={handleSaveScripts}
+              onExportReport={handleExportReport}
+              executionOptions={{ useTransaction, stopOnError }}
+              onExecutionOptionsChange={(options) => {
+                setUseTransaction(options.useTransaction);
+                setStopOnError(options.stopOnError);
+              }}
             />
           )}
         </Box>

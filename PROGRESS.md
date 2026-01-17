@@ -3,14 +3,19 @@
 ## Overview
 This document tracks the progress of implementing Red Gate SQL Compare-like functionality in SSSC (Simple SQL Source Control).
 
-## Status: MVP with Limitations
+## Status: Feature Complete
 
-Core Schema Compare functionality is implemented and usable. The implementation works best for **stored procedures, views, and functions**. Table comparison has limited coverage (see Known Limitations below).
+Core Schema Compare functionality is fully implemented with comprehensive object support. The implementation now supports **all major SQL Server object types** including tables, views, procedures, functions, triggers, indexes, sequences, synonyms, and user-defined types.
 
-### Important Caveats
-- **Table comparison is partial**: Only detects added/removed columns, not datatype or constraint changes
+### Recent Enhancements (January 2026)
+- **Full table comparison**: Detects column datatype changes, CHECK/UNIQUE constraints, computed columns
+- **Index support**: Non-clustered indexes extracted and compared as separate objects
+- **Additional object types**: Sequences, Synonyms, User-defined Types now supported
+- **Transaction support**: Script execution wrapped in transactions with rollback (industry standard)
+- **HTML reports**: Comprehensive comparison reports with diff views
+
+### Remaining Caveats
 - **No dependency analysis**: Scripts execute without checking for dependent objects
-- **No transaction wrapping**: Each script executes independently (no rollback on failure)
 - **Risk classification is basic**: "Safe" changes should still be reviewed before execution
 
 ---
@@ -31,11 +36,18 @@ Core Schema Compare functionality is implemented and usable. The implementation 
 - [x] Folder browser dialog for script selection
 
 ### 3. Database Schema Extraction
-- [x] Tables (basic column definitions - see limitations)
+- [x] Tables (full column definitions with datatypes, constraints, defaults)
 - [x] Views (full CREATE VIEW statements)
 - [x] Stored Procedures (full CREATE PROCEDURE statements)
 - [x] Functions (scalar, table-valued, inline)
 - [x] Triggers (DML triggers on tables)
+- [x] Non-clustered Indexes (with included columns and filters)
+- [x] Sequences (with all properties)
+- [x] Synonyms
+- [x] User-defined Types (alias and table types)
+- [x] CHECK constraints
+- [x] UNIQUE constraints
+- [x] Computed columns
 
 ### 4. Folder Parser
 - [x] Parse .sql files from directories
@@ -77,7 +89,9 @@ Core Schema Compare functionality is implemented and usable. The implementation 
 - [x] Filter out destructive changes automatically
 - [x] Success/error feedback with snackbar notifications
 - [x] Batch execution with error collection
-- [ ] Transaction wrapping (not implemented - scripts execute individually)
+- [x] Transaction wrapping with rollback on failure (industry standard, enabled by default)
+- [x] Stop on error option
+- [x] UI toggles for transaction and error handling options
 - [ ] Dependency analysis (not implemented - review scripts before execution)
 
 ### 10. Save Scripts
@@ -86,7 +100,16 @@ Core Schema Compare functionality is implemented and usable. The implementation 
 - [x] Timestamped default filename
 - [x] Header comments with object info and risk level
 
-### 11. History Compare (Existing)
+### 11. HTML Report Generation
+- [x] Export comparison results to comprehensive HTML report
+- [x] Summary statistics with visual cards
+- [x] Breakdown by object type (added/modified/removed)
+- [x] Collapsible change cards with scripts
+- [x] Unified diff view for modified objects
+- [x] Print-friendly styles
+- [x] Responsive design
+
+### 12. History Compare (Existing)
 - [x] View stored procedure snapshots over time
 - [x] Compare two snapshots with diff view
 - [x] Export diff reports as HTML
@@ -98,14 +121,14 @@ Core Schema Compare functionality is implemented and usable. The implementation 
 These are acknowledged gaps for future enhancement:
 
 ### Table Comparison
-- Column datatype changes not detected (only added/removed columns)
-- Constraint changes not fully detected
-- Index changes not detected
-- Foreign key changes limited
+- ~~Column datatype changes not detected~~ ✅ Now implemented
+- ~~Constraint changes not fully detected~~ ✅ CHECK and UNIQUE now supported
+- ~~Index changes not detected~~ ✅ Non-clustered indexes now extracted
+- Foreign key changes - multi-column FKs with ON DELETE/UPDATE actions now supported
 
 ### Script Execution
 - No dependency analysis before execution
-- No transaction wrapping (scripts execute individually)
+- ~~No transaction wrapping~~ ✅ Transaction support with rollback now implemented
 - No pre-execution validation
 
 ### Comparison Algorithm
@@ -163,24 +186,25 @@ src/
 
 ## Next Steps (Future Improvements)
 
-1. **Enhanced Table Comparison**
-   - Detect column datatype changes
-   - Compare constraints (CHECK, DEFAULT, UNIQUE)
-   - Compare indexes and foreign keys
+1. ~~**Enhanced Table Comparison**~~ ✅ Completed
+   - ~~Detect column datatype changes~~ ✅
+   - ~~Compare constraints (CHECK, DEFAULT, UNIQUE)~~ ✅
+   - ~~Compare indexes and foreign keys~~ ✅
 
 2. **Dependency Analysis**
    - Check object dependencies before execution
    - Order scripts by dependency graph
    - Warn about potential breaking changes
 
-3. **Transaction Support**
-   - Wrap script execution in transactions
-   - Rollback on failure option
+3. ~~**Transaction Support**~~ ✅ Completed
+   - ~~Wrap script execution in transactions~~ ✅
+   - ~~Rollback on failure option~~ ✅
 
 4. **Additional Features**
    - Schema snapshots for version control
    - Scheduled comparisons
-   - Report generation (PDF/HTML)
+   - ~~Report generation (HTML)~~ ✅ Completed
+   - Report generation (PDF) - pending
    - Sync status dashboard
 
 ---
@@ -200,4 +224,4 @@ To test the Schema Compare feature:
 
 ---
 
-*Last Updated: December 4, 2025*
+*Last Updated: January 17, 2026*

@@ -19,9 +19,15 @@ declare global {
       extractSchema: (source: SchemaSource) => Promise<SchemaObject[]>;
       parseFolder: (folderPath: string) => Promise<SchemaObject[]>;
       compareSchemas: (source: SchemaSource, target: SchemaSource) => Promise<ComparisonResult>;
-      executeScripts: (target: SchemaSource, scripts: string[]) => Promise<{ success: boolean; results: string[]; errors: string[] }>;
+      executeScripts: (
+        target: SchemaSource, 
+        scripts: string[],
+        options?: { useTransaction?: boolean; stopOnError?: boolean }
+      ) => Promise<{ success: boolean; results: string[]; errors: string[]; rolledBack?: boolean }>;
       saveTextFile: (outputPath: string, content: string) => Promise<{ status: string; message: string }>;
       saveSqlDialog: (defaultFileName: string) => Promise<{ canceled: boolean; filePath?: string }>;
+      generateHtmlReport: (comparisonResult: ComparisonResult) => Promise<string>;
+      saveHtmlReportDialog: (defaultFileName: string) => Promise<{ canceled: boolean; filePath?: string }>;
     };
   }
 }

@@ -42,7 +42,10 @@ export interface ServerLogonFields {
     | 'Index'
     | 'Constraint'
     | 'Type'
-    | 'Schema';
+    | 'Schema'
+    | 'Sequence'
+    | 'Synonym'
+    | 'UserDefinedType';
 
   export type ChangeRiskLevel = 'safe' | 'warning' | 'destructive';
 

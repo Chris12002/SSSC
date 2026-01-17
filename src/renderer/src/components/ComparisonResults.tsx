@@ -7,21 +7,32 @@ import {
   Chip,
   Collapse,
   FormControl,
+  FormControlLabel,
   InputAdornment,
   InputLabel,
   MenuItem,
   Select,
+  Switch,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material';
 import Grid from '@mui/material/Grid2';
 import { ComparisonResult, SchemaChange, SchemaObjectType, ChangeRiskLevel } from '../../../shared/types';
+
+interface ExecutionOptions {
+  useTransaction: boolean;
+  stopOnError: boolean;
+}
 
 interface ComparisonResultsProps {
   result: ComparisonResult;
   onReset: () => void;
   onApplyChanges: (changes: SchemaChange[]) => void;
   onSaveScripts: (changes: SchemaChange[]) => void;
+  onExportReport: () => void;
+  executionOptions: ExecutionOptions;
+  onExecutionOptionsChange: (options: ExecutionOptions) => void;
 }
 
 const RISK_COLORS: Record<ChangeRiskLevel, string> = {
@@ -47,6 +58,9 @@ const ComparisonResults: React.FC<ComparisonResultsProps> = ({
   onReset,
   onApplyChanges,
   onSaveScripts,
+  onExportReport,
+  executionOptions,
+  onExecutionOptionsChange,
 }) => {
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
@@ -349,9 +363,69 @@ const ComparisonResults: React.FC<ComparisonResultsProps> = ({
         </Box>
       )}
 
-      <Box sx={{ mt: 4, display: 'flex', gap: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
+      {/* Execution Options */}
+      <Box sx={{ 
+        mt: 4, 
+        p: 2, 
+        bgcolor: 'grey.100', 
+        borderRadius: 2,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 3,
+        flexWrap: 'wrap'
+      }}>
+        <Typography variant="subtitle2" color="textSecondary">
+          Execution Options:
+        </Typography>
+        <Tooltip title="When enabled, all changes are executed in a single transaction. If any script fails, all changes are rolled back. This is the industry standard for safe deployments.">
+          <FormControlLabel
+            control={
+              <Switch
+                checked={executionOptions.useTransaction}
+                onChange={(e) => onExecutionOptionsChange({
+                  ...executionOptions,
+                  useTransaction: e.target.checked
+                })}
+                color="primary"
+              />
+            }
+            label="Use Transaction"
+          />
+        </Tooltip>
+        <Tooltip title="When enabled, execution stops immediately when an error occurs. When using transactions, this triggers a rollback.">
+          <FormControlLabel
+            control={
+              <Switch
+                checked={executionOptions.stopOnError}
+                onChange={(e) => onExecutionOptionsChange({
+                  ...executionOptions,
+                  stopOnError: e.target.checked
+                })}
+                color="primary"
+                disabled={!executionOptions.useTransaction}
+              />
+            }
+            label="Stop on Error"
+          />
+        </Tooltip>
+        {!executionOptions.useTransaction && (
+          <Typography variant="caption" color="warning.main">
+            Warning: Without transactions, changes cannot be rolled back on failure
+          </Typography>
+        )}
+      </Box>
+
+      <Box sx={{ mt: 3, display: 'flex', gap: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
         <Button variant="outlined" onClick={onReset}>
           Start New Comparison
+        </Button>
+        <Button
+          variant="outlined"
+          color="secondary"
+          onClick={onExportReport}
+        >
+          Export Report (HTML)
         </Button>
         <Button
           variant="contained"
